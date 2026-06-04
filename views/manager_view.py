@@ -103,169 +103,21 @@ def _amount_cards(items: list[tuple]):
     )
 
 
-# ── Case form dialog (create + edit) ──────────────────────────────────────────
-
-@st.dialog("Separation Case", width="large")
-def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
-    from lib.calculations import _parse_date as _pd
-    is_edit  = edit_case is not None
-    emp_code = emp.get("emp_code", "")
-
-    # Reset form state when a different employee is opened
-    if st.session_state.get("_cf_emp") != emp_code:
-        st.session_state["_cf_emp"] = emp_code
-        for k in ["cf_dor", "cf_lwd", "cf_reason", "cf_sub",
-                  "cf_notice", "cf_garden", "cf_comm", "cf_remarks"]:
-            st.session_state.pop(k, None)
-
-    # Set initial values on first open (never overwrite user's selection)
-    if "cf_dor" not in st.session_state:
-        st.session_state["cf_dor"] = _pd(edit_case.get("date_of_resignation")) if is_edit else None
-    if "cf_lwd" not in st.session_state:
-        st.session_state["cf_lwd"] = _pd(edit_case.get("last_working_date")) if is_edit else None
-
-    # Employee banner
-    st.markdown(
-        f"**{emp.get('full_name','')}** &nbsp;|&nbsp; "
-        f"{emp.get('grade','')} / {emp.get('band','')} &nbsp;|&nbsp; "
-        f"{emp.get('external_designation','')} &nbsp;|&nbsp; {emp.get('entity','')}",
-        unsafe_allow_html=True,
-    )
-    st.divider()
-    _section("Case Inputs", "amber")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        # No value= param — Streamlit reads from session_state via key
-        dor = st.date_input("Date of Resignation *", key="cf_dor")
-        lwd = st.date_input("Last Working Date *",   key="cf_lwd")
-
-        # Real-time LWD validation
-        if lwd:
-            from datetime import date as _date
-            today = _date.today()
-            if lwd < today:
-                st.error("Last Working Date cannot be a past date.")
-            elif dor and lwd < dor:
-                st.error("Last Working Date cannot be before Date of Resignation.")
-
-        reason_opts = [""] + SEPARATION_REASONS
-        prev_reason = edit_case.get("separation_reason", "") if is_edit else ""
-        if "cf_reason" not in st.session_state:
-            st.session_state["cf_reason"] = reason_opts.index(prev_reason) if prev_reason in reason_opts else 0
-        sep_reason = st.selectbox("Separation Reason *", reason_opts, key="cf_reason")
-
-    with c2:
-        notice_opts  = ["Serving Notice", "Immediate Exit"]
-        prev_notice  = edit_case.get("immediate_exit_or_serving_notice", notice_opts[0]) if is_edit else notice_opts[0]
-        if "cf_notice" not in st.session_state:
-            st.session_state["cf_notice"] = notice_opts.index(prev_notice) if prev_notice in notice_opts else 0
-        notice_type  = st.selectbox("Notice Type *",  notice_opts, key="cf_notice")
-
-        garden_opts  = ["No", "Yes", "NA"]
-        prev_garden  = edit_case.get("garden_leave", garden_opts[0]) if is_edit else garden_opts[0]
-        if "cf_garden" not in st.session_state:
-            st.session_state["cf_garden"] = garden_opts.index(prev_garden) if prev_garden in garden_opts else 0
-        garden_leave = st.selectbox("Garden Leave *", garden_opts, key="cf_garden")
-
-        sub_opts   = SUB_REASONS.get(sep_reason, [])
-        prev_sub   = edit_case.get("separation_sub_reason", "") if is_edit else ""
-        sub_reason = st.selectbox(
-            "Separation Sub Reason *",
-            [""] + sub_opts,
-            index=(sub_opts.index(prev_sub) + 1) if prev_sub in sub_opts else 0,
-            disabled=not sep_reason,
-            key="cf_sub",
-        )
-
-    comm_opts   = [""] + COMMUNICATION_STATUSES
-    prev_comm   = edit_case.get("communication_status", "") if is_edit else ""
-    if "cf_comm" not in st.session_state:
-        st.session_state["cf_comm"] = comm_opts.index(prev_comm) if prev_comm in comm_opts else 0
-    comm_status = st.selectbox("Communication Status *", comm_opts, key="cf_comm")
-
-    if "cf_remarks" not in st.session_state:
-        st.session_state["cf_remarks"] = edit_case.get("remarks", "") if is_edit else ""
-    remarks = st.text_area("Remarks / Exception", key="cf_remarks")
-
-    existing_file_url  = edit_case.get("approval_file_url", "")  if is_edit else ""
-    existing_file_name = edit_case.get("approval_file_name", "") if is_edit else ""
-    if existing_file_url:
-        st.link_button(f"📎 Current Approval Doc: {existing_file_name or 'View'}", existing_file_url)
-    approval_file = st.file_uploader(
-        "Upload Approval PDF" + (" (replace existing)" if existing_file_url else ""),
-        type=["pdf", "jpg", "jpeg", "png"], key="cf_file",
-    )
-    if remarks and not approval_file and not existing_file_url:
-        st.warning("Approval document is mandatory when remarks are entered.")
-
-    # ── Calculations ──────────────────────────────────────────────────────────
-    if sep_reason and lwd and dor and not (lwd < dor):
-        calc = calculate_case(emp, {
-            "last_working_date":               str(lwd),
-            "date_of_resignation":             str(dor),
-            "separation_reason":               sep_reason,
-            "immediate_exit_or_serving_notice": notice_type,
-        })
-        _section("Calculations", "green")
-
-        # Row 1: info fields
-        _calc_cards([
-            ("Rehire Status",           calc["rehire_status"] or "—"),
-            ("Tenure",                  calc["tenure"] or "—"),
-            ("Tenure Cohort",           calc["tenure_cohort"] or "—"),
-            ("Tenure Served",           str(calc["tenure_served"]) if calc["tenure_served"] != "" else "—"),
-            ("CTC Cohort",              calc["ctc_cohort"] or "—"),
-            ("Severance Applicability", calc["severance_applicability"] or "—"),
-            ("Severance Days",          str(calc["severance_days"])),
-            ("Notice Period (Days)",    str(calc["notice_period_days"])),
-            ("Variable Days (prorata)", str(calc["variable_days_prorata"])),
-        ])
-
-        # Row 2: monetary amounts
-        _amount_cards([
-            ("Monthly Fixed Gross",   _inr(calc["monthly_fixed_gross"])),
-            ("Severance Pay Amount",  _inr(calc["severance_pay_amount"])),
-            ("Notice Period Amount",  _inr(calc["notice_period_amount"])),
-            ("Variable Pay Amount",   _inr(calc["variable_pay_amount"])),
-        ])
-
-    st.divider()
-    if not st.button("Submit Case", type="primary", use_container_width=True, key="cf_submit"):
-        return
-
-    # ── Validation ────────────────────────────────────────────────────────────
-    errors = []
-    if not dor:            errors.append("Date of Resignation")
-    if not lwd:            errors.append("Last Working Date")
-    if not sep_reason:     errors.append("Separation Reason")
-    if not sub_reason:     errors.append("Separation Sub Reason")
-    if not comm_status:    errors.append("Communication Status")
-    if errors:
-        st.error(f"Missing required fields: {', '.join(errors)}")
-        return
-    if lwd < dor:
-        st.error("Last Working Date cannot be before Date of Resignation.")
-        return
-    if not is_edit and lwd < date.today():
-        st.error("Last Working Date cannot be backdated.")
-        return
-    if remarks and not approval_file and not existing_file_url:
-        st.error("Approval document is required when remarks are entered.")
-        return
-
-    # ── Build case ────────────────────────────────────────────────────────────
-    calc = calculate_case(emp, {
-        "last_working_date":               str(lwd),
-        "date_of_resignation":             str(dor),
-        "separation_reason":               sep_reason,
-        "immediate_exit_or_serving_notice": notice_type,
-    })
+def _save_case(emp, user_email, is_edit, edit_case, calc, inputs):
+    """Build case_data dict and write to Supabase."""
+    sep_reason   = inputs["sep_reason"]
+    sub_reason   = inputs["sub_reason"]
+    dor          = inputs["dor"]
+    lwd          = inputs["lwd"]
+    notice_type  = inputs["notice_type"]
+    garden_leave = inputs["garden_leave"]
+    comm_status  = inputs["comm_status"]
+    remarks      = inputs["remarks"]
+    approval_file= inputs.get("approval_file")
 
     old_status = edit_case.get("status", "") if is_edit else ""
     new_status = _get_status(comm_status, old_status)
 
-    # Only fields that exist as columns in the cases table schema
     emp_fields = [
         "emp_code", "entity", "business_unit", "lob", "function",
         "sub_function", "region", "site_name", "grade", "band",
@@ -277,27 +129,25 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
     ]
     case_data = {
         **{k: emp.get(k) for k in emp_fields},
-        # Map employee field names → cases table column names
-        "emp_name":                          emp.get("full_name", ""),
-        "official_email":                    emp.get("company_email_id", ""),
-        "personal_email":                    emp.get("personal_email_id", ""),
-        "personal_contact":                  emp.get("personal_mobile_no", ""),
-        "date_of_resignation":               str(dor),
-        "last_working_date":                 str(lwd),
-        "separation_reason":                 sep_reason,
-        "separation_sub_reason":             sub_reason,
-        "immediate_exit_or_serving_notice":  notice_type,
-        "garden_leave":                      garden_leave,
-        "communication_status":              comm_status,
-        "remarks":                           remarks,
-        "status":                            new_status,
-        "created_by":                        user_email,
-        "created_by_role":                   "MANAGER",
+        "emp_name":                         emp.get("full_name", ""),
+        "official_email":                   emp.get("company_email_id", ""),
+        "personal_email":                   emp.get("personal_email_id", ""),
+        "personal_contact":                 emp.get("personal_mobile_no", ""),
+        "date_of_resignation":              str(dor),
+        "last_working_date":                str(lwd),
+        "separation_reason":                sep_reason,
+        "separation_sub_reason":            sub_reason,
+        "immediate_exit_or_serving_notice": notice_type,
+        "garden_leave":                     garden_leave,
+        "communication_status":             comm_status,
+        "remarks":                          remarks,
+        "status":                           new_status,
+        "created_by":                       user_email,
+        "created_by_role":                  "MANAGER",
         **calc,
     }
 
     if is_edit:
-        # Preserve admin / audit fields
         preserve = [
             "admin_remarks", "admin_action", "admin_action_status",
             "admin_closed_status", "admin_closed_at", "admin_closed_by",
@@ -308,7 +158,6 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
         for f in preserve:
             if f in edit_case:
                 case_data[f] = edit_case[f]
-        # Clear sent-back admin markers when manager resubmits
         if old_status.lower() in ("sent back", "sentback"):
             for f in ("admin_action", "sent_back_at", "sent_back_by"):
                 case_data[f] = ""
@@ -321,33 +170,237 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
                 url, fname = _upload_file(approval_file, case_id)
                 update_case(case_id, {"approval_file_url": url, "approval_file_name": fname})
             except Exception:
-                st.warning("Case updated but file upload failed.")
+                pass
         elif not remarks:
             update_case(case_id, {"approval_file_url": "", "approval_file_name": ""})
         log_audit("CASE_UPDATED", case_id, user_email)
-        st.success(f"Case **{case_id}** updated successfully!")
+        return case_id, False
     else:
-        with st.spinner("Creating case…"):
-            created = create_case(case_data)
+        created = create_case(case_data)
         if not created:
-            st.error("Failed to create case. Please try again.")
-            return
+            return None, False
         case_id = created["case_id"]
         if approval_file:
             try:
                 url, fname = _upload_file(approval_file, case_id)
                 update_case(case_id, {"approval_file_url": url, "approval_file_name": fname})
             except Exception:
-                st.warning("Case created but file upload failed.")
+                pass
         log_audit("CASE_CREATED", case_id, user_email)
         try:
             from lib.email_utils import send_case_created
             send_case_created({**case_data, "case_id": case_id})
         except Exception:
             pass
-        st.success(f"Case **{case_id}** created successfully!")
+        return case_id, True
 
-    st.rerun()
+
+# ── Case form dialog (create + edit) — 2-phase: inputs → preview → confirm ────
+
+@st.dialog("Separation Case", width="large")
+def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
+    from lib.calculations import _parse_date as _pd
+    from datetime import date as _dt
+    is_edit  = edit_case is not None
+    emp_code = emp.get("emp_code", "")
+
+    # Reset all form state when a different employee is opened
+    if st.session_state.get("_cf_emp") != emp_code:
+        for k in [k for k in st.session_state if k.startswith("cf_")]:
+            del st.session_state[k]
+        st.session_state["_cf_emp"]   = emp_code
+        st.session_state["cf_phase"]  = "input"
+
+    phase = st.session_state.get("cf_phase", "input")
+
+    # Employee banner
+    st.markdown(
+        f"**{emp.get('full_name','')}** &nbsp;|&nbsp; "
+        f"{emp.get('grade','')} / {emp.get('band','')} &nbsp;|&nbsp; "
+        f"{emp.get('external_designation','')} &nbsp;|&nbsp; {emp.get('entity','')}",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    # ══ PHASE 1: INPUT FORM ════════════════════════════════════════════════════
+    if phase == "input":
+        _section("Case Inputs", "amber")
+
+        # Sep reason ABOVE form → sub-reasons update without affecting date inputs
+        reason_opts = [""] + SEPARATION_REASONS
+        prev_reason = edit_case.get("separation_reason", "") if is_edit else st.session_state.get("cf_s_reason", "")
+        sep_reason  = st.selectbox(
+            "Separation Reason *",
+            reason_opts,
+            index=reason_opts.index(prev_reason) if prev_reason in reason_opts else 0,
+            key="cf_reason_sel",
+        )
+        sub_opts = SUB_REASONS.get(sep_reason, [])
+
+        # st.form → batches all inputs, dates stay closed until submitted
+        with st.form("case_inputs_form"):
+            c1, c2 = st.columns(2)
+            with c1:
+                dor = st.date_input(
+                    "Date of Resignation *",
+                    value=_pd(edit_case.get("date_of_resignation")) if is_edit else st.session_state.get("cf_s_dor"),
+                )
+                lwd = st.date_input(
+                    "Last Working Date *",
+                    value=_pd(edit_case.get("last_working_date")) if is_edit else st.session_state.get("cf_s_lwd"),
+                    min_value=_dt.today() if not is_edit else None,
+                    help="Past dates are disabled. LWD must be today or later.",
+                )
+                notice_opts = ["Serving Notice", "Immediate Exit"]
+                prev_notice = edit_case.get("immediate_exit_or_serving_notice", notice_opts[0]) if is_edit else st.session_state.get("cf_s_notice", notice_opts[0])
+                notice_type = st.selectbox("Notice Type *", notice_opts,
+                                            index=notice_opts.index(prev_notice) if prev_notice in notice_opts else 0)
+
+            with c2:
+                prev_sub   = edit_case.get("separation_sub_reason", "") if is_edit else st.session_state.get("cf_s_sub", "")
+                sub_reason = st.selectbox(
+                    "Separation Sub Reason *",
+                    [""] + sub_opts,
+                    index=(sub_opts.index(prev_sub) + 1) if prev_sub in sub_opts else 0,
+                    disabled=not sep_reason,
+                    help="Select Separation Reason first" if not sep_reason else "",
+                )
+                garden_opts  = ["No", "Yes", "NA"]
+                prev_garden  = edit_case.get("garden_leave", garden_opts[0]) if is_edit else st.session_state.get("cf_s_garden", garden_opts[0])
+                garden_leave = st.selectbox("Garden Leave *", garden_opts,
+                                             index=garden_opts.index(prev_garden) if prev_garden in garden_opts else 0)
+                comm_opts   = [""] + COMMUNICATION_STATUSES
+                prev_comm   = edit_case.get("communication_status", "") if is_edit else st.session_state.get("cf_s_comm", "")
+                comm_status = st.selectbox("Communication Status *", comm_opts,
+                                            index=comm_opts.index(prev_comm) if prev_comm in comm_opts else 0)
+
+            prev_remarks = edit_case.get("remarks", "") if is_edit else st.session_state.get("cf_s_remarks", "")
+            remarks      = st.text_area("Remarks / Exception", value=prev_remarks)
+
+            existing_url  = edit_case.get("approval_file_url", "")  if is_edit else ""
+            existing_name = edit_case.get("approval_file_name", "") if is_edit else ""
+            if existing_url:
+                st.markdown(f"📎 [Current Approval Doc: {existing_name or 'View'}]({existing_url})")
+            approval_file = st.file_uploader(
+                "Upload Approval PDF" + (" (replace existing)" if existing_url else ""),
+                type=["pdf", "jpg", "jpeg", "png"],
+            )
+            if remarks and not approval_file and not existing_url:
+                st.warning("Approval document is mandatory when remarks are entered.")
+
+            preview_btn = st.form_submit_button(
+                "Preview Calculations →", type="primary", use_container_width=True
+            )
+
+        if preview_btn:
+            # Validate
+            err = []
+            if not sep_reason:  err.append("Separation Reason")
+            if not sub_reason:  err.append("Separation Sub Reason")
+            if not dor:         err.append("Date of Resignation")
+            if not lwd:         err.append("Last Working Date")
+            if not comm_status: err.append("Communication Status")
+            if err:
+                st.error(f"Missing: {', '.join(err)}")
+                return
+            if lwd < dor:
+                st.error("Last Working Date cannot be before Date of Resignation.")
+                return
+            if not is_edit and lwd < _dt.today():
+                st.error("Last Working Date cannot be a past date.")
+                return
+            if remarks and not approval_file and not existing_url:
+                st.error("Approval document is required when remarks are entered.")
+                return
+
+            # Save inputs to session state → move to preview phase
+            st.session_state.update({
+                "cf_s_reason":  sep_reason,  "cf_s_sub":     sub_reason,
+                "cf_s_dor":     dor,         "cf_s_lwd":     lwd,
+                "cf_s_notice":  notice_type, "cf_s_garden":  garden_leave,
+                "cf_s_comm":    comm_status, "cf_s_remarks":  remarks,
+                "cf_s_file":    approval_file, "cf_s_ex_url": existing_url,
+                "cf_phase":     "preview",
+            })
+            st.rerun()
+
+    # ══ PHASE 2: CALCULATIONS PREVIEW + CONFIRM ════════════════════════════════
+    elif phase == "preview":
+        sep_reason   = st.session_state["cf_s_reason"]
+        sub_reason   = st.session_state["cf_s_sub"]
+        dor          = st.session_state["cf_s_dor"]
+        lwd          = st.session_state["cf_s_lwd"]
+        notice_type  = st.session_state["cf_s_notice"]
+        garden_leave = st.session_state["cf_s_garden"]
+        comm_status  = st.session_state["cf_s_comm"]
+        remarks      = st.session_state["cf_s_remarks"]
+        approval_file= st.session_state.get("cf_s_file")
+        existing_url = st.session_state.get("cf_s_ex_url", "")
+
+        # Input summary
+        _section("Case Summary", "amber")
+        s1, s2, s3 = st.columns(3)
+        s1.write(f"**Date of Resignation:** {dor}")
+        s2.write(f"**Last Working Date:** {lwd}")
+        s3.write(f"**Notice Type:** {notice_type}")
+        s1.write(f"**Separation Reason:** {sep_reason}")
+        s2.write(f"**Sub Reason:** {sub_reason}")
+        s3.write(f"**Garden Leave:** {garden_leave}")
+        s1.write(f"**Comm Status:** {comm_status}")
+        if remarks:
+            st.write(f"**Remarks:** {remarks}")
+
+        # Calculations
+        calc = calculate_case(emp, {
+            "last_working_date":               str(lwd),
+            "date_of_resignation":             str(dor),
+            "separation_reason":               sep_reason,
+            "immediate_exit_or_serving_notice": notice_type,
+        })
+        _section("Calculations", "green")
+        _calc_cards([
+            ("Rehire Status",           calc["rehire_status"] or "—"),
+            ("Tenure",                  calc["tenure"] or "—"),
+            ("Tenure Cohort",           calc["tenure_cohort"] or "—"),
+            ("Tenure Served",           str(calc["tenure_served"]) if calc["tenure_served"] != "" else "—"),
+            ("CTC Cohort",              calc["ctc_cohort"] or "—"),
+            ("Severance Applicability", calc["severance_applicability"] or "—"),
+            ("Severance Days",          str(calc["severance_days"])),
+            ("Notice Period (Days)",    str(calc["notice_period_days"])),
+            ("Variable Days (prorata)", str(calc["variable_days_prorata"])),
+        ])
+        _amount_cards([
+            ("Monthly Fixed Gross",  _inr(calc["monthly_fixed_gross"])),
+            ("Severance Pay Amount", _inr(calc["severance_pay_amount"])),
+            ("Notice Period Amount", _inr(calc["notice_period_amount"])),
+            ("Variable Pay Amount",  _inr(calc["variable_pay_amount"])),
+        ])
+
+        st.divider()
+        bc, cc = st.columns(2)
+        if bc.button("← Edit", use_container_width=True):
+            st.session_state["cf_phase"] = "input"
+            st.rerun()
+
+        if cc.button("✓ Confirm & Create Case", type="primary", use_container_width=True):
+            inputs = {
+                "sep_reason": sep_reason, "sub_reason":   sub_reason,
+                "dor":        dor,        "lwd":          lwd,
+                "notice_type":notice_type,"garden_leave": garden_leave,
+                "comm_status":comm_status,"remarks":      remarks,
+                "approval_file": approval_file,
+            }
+            with st.spinner("Saving case…"):
+                case_id, is_new = _save_case(emp, user_email, is_edit, edit_case, calc, inputs)
+            if case_id:
+                action = "created" if is_new else "updated"
+                st.success(f"Case **{case_id}** {action} successfully!")
+                # Clear form state
+                for k in [k for k in st.session_state if k.startswith("cf_")]:
+                    del st.session_state[k]
+                st.rerun()
+            else:
+                st.error("Failed to save case. Please try again.")
 
 
 # ── Case detail dialog ─────────────────────────────────────────────────────────
