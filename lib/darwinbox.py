@@ -141,9 +141,9 @@ def fetch_employee_master() -> list[dict]:
     elif isinstance(json_data, dict):
         # Try every known key name
         raw_list = []
-        for key in ["data", "employees", "result", "employee_details",
-                    "records", "items", "employee_data", "employeeData",
-                    "EmployeeData", "Data", "Results"]:
+        # employee_data is the actual Darwinbox master API key (confirmed from Code.gs)
+        for key in ["employee_data", "data", "employees", "result", "employee_details",
+                    "records", "items", "employeeData", "EmployeeData", "Data", "Results"]:
             val = json_data.get(key)
             if isinstance(val, list) and val:
                 raw_list = val
