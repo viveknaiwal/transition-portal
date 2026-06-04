@@ -95,32 +95,60 @@ def _show_case_detail(case_id: str, admin_email: str):
     email_sent = str(c.get("email_sent", "")).lower() == "sent"
 
     if is_closed:
-        st.success("This case is **Closed**.")
-        if not email_sent:
-            if st.button("Send Closure Email to Employee", type="primary"):
-                try:
-                    from lib.email_utils import send_closure_email
-                    send_closure_email(c)
-                    update_case(case_id, {
-                        "email_sent":        "Sent",
-                        "email_sent_at":     _now(),
-                        "email_sent_status": "Sent",
-                    })
-                    log_audit("CLOSURE_EMAIL_SENT", case_id, admin_email)
-                    st.success("Closure email sent to employee!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Email failed: {e}")
-        else:
-            st.info(f"Closure email already sent at {str(c.get('email_sent_at',''))[:19]}")
-            if st.button("Resend Closure Email"):
-                try:
-                    from lib.email_utils import send_closure_email
-                    send_closure_email(c)
-                    log_audit("CLOSURE_EMAIL_RESENT", case_id, admin_email)
-                    st.success("Closure email resent!")
-                except Exception as e:
-                    st.error(f"Email failed: {e}")
+        st.success("This case is **Admin Closed**.")
+
+        email_col, reopen_col = st.columns(2)
+
+        # ── Send / resend closure email ────────────────────────────────────────
+        with email_col:
+            if not email_sent:
+                if st.button("Send Closure Email to Employee", type="primary", use_container_width=True):
+                    try:
+                        from lib.email_utils import send_closure_email
+                        send_closure_email(c)
+                        update_case(case_id, {
+                            "email_sent":        "Sent",
+                            "email_sent_at":     _now(),
+                            "email_sent_status": "Sent",
+                        })
+                        log_audit("CLOSURE_EMAIL_SENT", case_id, admin_email)
+                        st.success("Closure email sent!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Email failed: {e}")
+            else:
+                st.info(f"Email sent at {str(c.get('email_sent_at',''))[:19]}")
+                if st.button("Resend Closure Email", use_container_width=True):
+                    try:
+                        from lib.email_utils import send_closure_email
+                        send_closure_email(c)
+                        log_audit("CLOSURE_EMAIL_RESENT", case_id, admin_email)
+                        st.success("Closure email resent!")
+                    except Exception as e:
+                        st.error(f"Email failed: {e}")
+
+        # ── Reopen case ────────────────────────────────────────────────────────
+        with reopen_col:
+            st.warning("Need to undo the closure?")
+            reopen_remarks = st.text_input("Reason for reopening", key=f"reopen_{case_id}",
+                                           placeholder="e.g. Closed by mistake")
+            if st.button("Reopen Case", use_container_width=True):
+                update_case(case_id, {
+                    "status":              "Submitted",
+                    "closure_status":      "",
+                    "admin_action":        "",
+                    "admin_action_status": "",
+                    "admin_closed_status": "",
+                    "admin_closed_at":     None,
+                    "admin_closed_by":     "",
+                    "admin_remarks":       f"[Reopened by {admin_email}] {reopen_remarks}",
+                    "email_sent":          False,
+                    "email_sent_at":       None,
+                    "email_sent_status":   "",
+                })
+                log_audit("CASE_REOPENED", case_id, admin_email, reopen_remarks)
+                st.success(f"Case **{case_id}** reopened — status reset to Submitted.")
+                st.rerun()
         return
 
     st.subheader("Take Action")
