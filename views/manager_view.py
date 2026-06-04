@@ -16,6 +16,39 @@ def _inr(v):
         return "₹0"
 
 
+def _section(title: str, color: str = "blue"):
+    """Colored section header — blue/purple/amber/green."""
+    palette = {
+        "blue":   ("#EFF6FF", "#1D4ED8", "#3B82F6"),
+        "purple": ("#F5F3FF", "#5B21B6", "#7C3AED"),
+        "amber":  ("#FFFBEB", "#92400E", "#F59E0B"),
+        "green":  ("#F0FDF4", "#14532D", "#22C55E"),
+    }
+    bg, text, border = palette.get(color, ("#F9FAFB", "#374151", "#9CA3AF"))
+    st.markdown(
+        f'<div style="background:{bg};border-left:4px solid {border};padding:10px 14px;'
+        f'border-radius:6px;margin:18px 0 10px 0;">'
+        f'<span style="color:{text};font-weight:800;font-size:14px;letter-spacing:.3px;">{title}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _chip(status: str) -> str:
+    STYLES = {
+        "Pending":       ("FEF3C7", "92400E"),
+        "Hold":          ("FEE2E2", "991B1B"),
+        "Submitted":     ("DBEAFE", "1D4ED8"),
+        "Sent Back":     ("FCE7F3", "9D174D"),
+        "Admin Closed":  ("D1FAE5", "065F46"),
+        "FNF Processed": ("D1FAE5", "065F46"),
+        "Closed":        ("D1FAE5", "065F46"),
+    }
+    bg, fg = STYLES.get(status, ("F3F4F6", "6B7280"))
+    return (f'<span style="background:#{bg};color:#{fg};padding:3px 10px;'
+            f'border-radius:999px;font-size:11px;font-weight:700;">{status}</span>')
+
+
 def _get_status(comm_status: str, old_status: str = "") -> str:
     if comm_status == "Completed":
         return "Submitted"
@@ -47,6 +80,7 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
         unsafe_allow_html=True,
     )
     st.divider()
+    _section("Case Inputs", "amber")
 
     # ── Dynamic form (no st.form — allows sub-reason to update on reason change) ──
     c1, c2 = st.columns(2)
@@ -133,7 +167,7 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
     if remarks and not approval_file and not existing_file_url:
         st.warning("Approval document is mandatory when remarks are entered.")
 
-    # Calc preview (live, updates as user fills form)
+    # ── Calculations (spec §13 display order) ────────────────────────────────
     if sep_reason and lwd and dor:
         calc_prev = calculate_case(emp, {
             "last_working_date":               str(lwd),
@@ -141,19 +175,26 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
             "separation_reason":               sep_reason,
             "immediate_exit_or_serving_notice": notice_type,
         })
-        with st.expander("Preview Calculations"):
-            pc1, pc2, pc3 = st.columns(3)
-            pc1.metric("Monthly Fixed Gross", _inr(calc_prev["monthly_fixed_gross"]))
-            pc2.metric("Severance Days",       calc_prev["severance_days"])
-            pc3.metric("Severance Pay",        _inr(calc_prev["severance_pay_amount"]))
-            pc1.metric("Notice Period Days",   calc_prev["notice_period_days"])
-            pc2.metric("Notice Period Amt",    _inr(calc_prev["notice_period_amount"]))
-            pc3.metric("Variable Pay",         _inr(calc_prev["variable_pay_amount"]))
-            st.caption(
-                f"Tenure: {calc_prev['tenure']}  |  "
-                f"Rehire: {calc_prev['rehire_status']}  |  "
-                f"Severance: {calc_prev['severance_applicability']}"
-            )
+        _section("Calculations", "green")
+        r1c1, r1c2, r1c3, r1c4 = st.columns(4)
+        r1c1.metric("Rehire Status",          calc_prev["rehire_status"] or "—")
+        r1c2.metric("Tenure",                 calc_prev["tenure"] or "—")
+        r1c3.metric("Tenure Cohort",          calc_prev["tenure_cohort"] or "—")
+        r1c4.metric("Tenure Served",          calc_prev["tenure_served"] if calc_prev["tenure_served"] != "" else "—")
+
+        r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+        r2c1.metric("CTC Cohort",             calc_prev["ctc_cohort"] or "—")
+        r2c2.metric("Severance Applicability",calc_prev["severance_applicability"] or "—")
+        r2c3.metric("Severance Days",         calc_prev["severance_days"])
+        r2c4.metric("Notice Period (Days)",   calc_prev["notice_period_days"])
+
+        r3c1, r3c2, r3c3, r3c4 = st.columns(4)
+        r3c1.metric("Variable Days (prorata)",calc_prev["variable_days_prorata"])
+        r3c2.metric("Monthly Fixed Gross",    _inr(calc_prev["monthly_fixed_gross"]))
+        r3c3.metric("Severance Pay Amount",   _inr(calc_prev["severance_pay_amount"]))
+        r3c4.metric("Notice Period Amount",   _inr(calc_prev["notice_period_amount"]))
+
+        st.metric("Variable Pay Amount", _inr(calc_prev["variable_pay_amount"]))
 
     st.divider()
     if not st.button("Submit Case", type="primary", use_container_width=True, key="cf_submit"):
@@ -394,7 +435,7 @@ def render_my_cases(user_email: str):
         )
         with st.expander(label):
             cc1, cc2, cc3 = st.columns(3)
-            cc1.write(f"**Status:** {case.get('status','')}")
+            cc1.markdown(_chip(case.get("status", "")), unsafe_allow_html=True)
             cc2.write(f"**Reason:** {case.get('separation_reason','')}")
             cc3.write(f"**Comm.:** {case.get('communication_status','')}")
             if case.get("admin_remarks"):

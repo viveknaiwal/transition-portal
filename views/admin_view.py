@@ -175,9 +175,10 @@ def _show_case_detail(case_id: str, admin_email: str):
             label = "CASE_CLOSED"
         elif action == "Sent Back":
             updates.update({
-                "status":         "Sent Back",
-                "sent_back_at":   _now(),
-                "sent_back_by":   admin_email,
+                "status":               "Sent Back",
+                "communication_status": "Pending",
+                "sent_back_at":         _now(),
+                "sent_back_by":         admin_email,
             })
             label = "CASE_SENT_BACK"
 

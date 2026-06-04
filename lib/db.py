@@ -125,16 +125,18 @@ def get_employee_count() -> int:
 
 # ── Cases ──────────────────────────────────────────────────────────────────────
 
-def _gen_case_id() -> str:
-    year  = datetime.now().year
-    short = str(uuid.uuid4())[:6].upper()
-    return f"TRP-{year}-{short}"
+def _gen_case_id(emp_code: str) -> str:
+    sb     = get_client()
+    res    = sb.table("cases").select("case_id", count="exact").eq("emp_code", emp_code).execute()
+    serial = (res.count or 0) + 1
+    return f"C24-{emp_code}-{serial:04d}"
 
 
 def create_case(data: dict) -> dict:
-    sb   = get_client()
-    data = {**data, "case_id": _gen_case_id(), "created_at": _now(), "updated_at": _now()}
-    res  = sb.table("cases").insert(data).execute()
+    sb       = get_client()
+    emp_code = str(data.get("emp_code", "00000"))
+    data     = {**data, "case_id": _gen_case_id(emp_code), "created_at": _now(), "updated_at": _now()}
+    res      = sb.table("cases").insert(data).execute()
     return res.data[0] if res.data else {}
 
 
