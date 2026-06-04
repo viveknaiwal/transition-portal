@@ -266,9 +266,15 @@ def fetch_employee_master() -> list[dict]:
 
         monthly_gross = (total_ctc - gratuity - pf - medical) / 12 if total_ctc > 0 else 0
 
-        # DOJ: use group_doj, fall back to doj
-        group_doj = str(r.get("group_date_of_joining") or r.get("date_of_joining") or "").strip()
-        doj       = str(r.get("date_of_joining") or "").strip()
+        # DOJ: try all known Darwinbox field names, group_doj preferred
+        doj = str(
+            r.get("date_of_joining") or r.get("joining_date") or
+            r.get("doj") or r.get("dateofjoining") or ""
+        ).strip()
+        group_doj = str(
+            r.get("group_date_of_joining") or r.get("group_doj") or
+            r.get("group_joining_date") or doj
+        ).strip()
 
         employees.append({
             "employee_id":          emp_id,
