@@ -344,11 +344,22 @@ def _show_case_detail(case: dict):
 # ── Shared render functions (used by admin_view too) ──────────────────────────
 
 def render_my_team(user_email: str):
-    employees = get_employees_for_manager(user_email)
+    try:
+        employees = get_employees_for_manager(user_email)
+    except Exception as e:
+        st.error(
+            "Could not load employee data from Google Sheet.\n\n"
+            f"**Error:** {e}\n\n"
+            "**Fix:** Go to your hr-dashboard Google Sheet → "
+            "File → Share → **Publish to web** → Sheet: Consolidated_Base → "
+            "Format: CSV → Publish → confirm the URL in Streamlit Secrets."
+        )
+        return
+
     if not employees:
         st.info(
             "No active direct reports found under your email. "
-            "If this is wrong, ask Admin to run **Sync Darwinbox** first."
+            "If this is wrong, the Google Sheet may not have your email as L1 Manager."
         )
         return
 

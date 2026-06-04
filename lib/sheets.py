@@ -59,28 +59,21 @@ def fetch_from_sheet() -> list[dict]:
             "→ Sheet: Consolidated_Base → Format: CSV → Publish → copy URL → add to .env"
         )
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; TransitionPortal/1.0)",
-    }
-
-    resp = requests.get(url, headers=headers, timeout=60, allow_redirects=True)
-
-    if resp.status_code != 200:
+    # pandas read_csv handles Google's redirects better than raw requests
+    try:
+        df = pd.read_csv(url, dtype=str).fillna("")
+    except Exception as e:
         raise ValueError(
-            f"Google Sheet returned HTTP {resp.status_code}. "
-            f"Possible causes:\n"
-            f"1. Sheet not published publicly — go to File → Share → Publish to web and re-publish\n"
-            f"2. Wrong URL — make sure you selected Consolidated_Base sheet and CSV format\n"
-            f"3. Sheet was unpublished — republish it"
+            f"Cannot read Google Sheet CSV. Error: {e}\n\n"
+            f"Fix: Open hr-dashboard Google Sheet → File → Share → Publish to web "
+            f"→ select 'Consolidated_Base' sheet → format 'CSV' → click Publish. "
+            f"Make sure 'Anyone on the internet can view' is shown."
         )
-
-    # pandas read_csv handles the actual parsing
-    df = pd.read_csv(StringIO(resp.text), dtype=str).fillna("")
 
     if df.empty or len(df.columns) < 5:
         raise ValueError(
-            f"Sheet returned {len(df)} rows and {len(df.columns)} columns — looks empty or wrong sheet. "
-            f"Check that GOOGLE_SHEET_CSV_URL points to Consolidated_Base."
+            f"Sheet returned {len(df)} rows, {len(df.columns)} columns — wrong sheet or empty. "
+            f"Check GOOGLE_SHEET_CSV_URL points to Consolidated_Base tab."
         )
 
     # Normalize all column names to lowercase + stripped

@@ -312,12 +312,15 @@ def admin_dashboard(user_email: str):
     ])
 
     with tab1:
-        st.caption("Your direct reports (based on Darwinbox data). Initiate separation cases here.")
+        st.caption("Your direct reports from Google Sheet (refreshes every 1 hour).")
         render_my_team(user_email)
 
     with tab2:
-        st.caption("Separation cases you initiated as a manager.")
-        render_my_cases(user_email)
+        st.caption("Separation cases you initiated.")
+        try:
+            render_my_cases(user_email)
+        except Exception as e:
+            st.error(f"Error loading cases: {e}")
 
     with tab3:
         _all_cases_tab(user_email)
