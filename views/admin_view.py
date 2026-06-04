@@ -367,11 +367,11 @@ def admin_dashboard(user_email: str):
     st.subheader("Admin Dashboard")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "My Team", "My Cases", "All Cases", "Sync Darwinbox", "Manage Users"
+        "My Team", "My Cases", "All Cases", "Employee Data & Sync", "Manage Users"
     ])
 
     with tab1:
-        st.caption("Your direct reports from Google Sheet (refreshes every 1 hour).")
+        st.caption("Your direct reports. Initiate separation cases here.")
         render_my_team(user_email)
 
     with tab2:
