@@ -217,27 +217,35 @@ def _sync_tab(admin_email: str):
     emp_count = get_employee_count()
 
     if emp_count == 0:
-        st.error(
-            "**No employees in database.** You must sync first before managers can see their teams. "
-            "Click **Start Sync** below."
-        )
+        st.error("**No employees in database yet.** Run **Test API Connection** first to verify, then Start Sync.")
     else:
-        st.info(f"**{emp_count}** employees currently in database. Last sync overwrites stale data.")
+        st.info(f"**{emp_count}** employees currently in database.")
 
-    st.warning("Sync fetches all active employees from Darwinbox and upserts them. Takes ~1-2 minutes.")
+    col1, col2 = st.columns(2)
 
-    if st.button("Start Sync", type="primary"):
-        with st.spinner("Fetching from Darwinbox API…"):
-            try:
-                from lib.darwinbox import fetch_employee_master
-                from lib.db import upsert_employees
-                employees = fetch_employee_master()
-                count     = upsert_employees(employees)
-                log_audit("DARWINBOX_SYNC", "SYSTEM", admin_email, f"Synced {count} employees")
-                st.success(f"Sync complete — **{count}** employees upserted. Managers can now log in and see their teams.")
-                st.balloons()
-            except Exception as e:
-                st.error(f"Sync failed: {e}")
+    with col1:
+        if st.button("Test API Connection", use_container_width=True):
+            with st.spinner("Pinging Darwinbox…"):
+                from lib.darwinbox import test_connection
+                info = test_connection()
+            st.subheader("API Response Info")
+            for k, v in info.items():
+                st.write(f"**{k}:** `{v}`")
+
+    with col2:
+        if st.button("Start Sync", type="primary", use_container_width=True):
+            with st.spinner("Fetching from Darwinbox API… (1-2 mins)"):
+                try:
+                    from lib.darwinbox import fetch_employee_master
+                    from lib.db import upsert_employees
+                    employees = fetch_employee_master()
+                    count     = upsert_employees(employees)
+                    log_audit("DARWINBOX_SYNC", "SYSTEM", admin_email, f"Synced {count} employees")
+                    st.success(f"Sync complete — **{count}** employees upserted.")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Sync failed: {e}")
+                    st.info("Run **Test API Connection** to see the raw response format.")
 
 
 # ── Manage Users tab ───────────────────────────────────────────────────────────

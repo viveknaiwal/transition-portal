@@ -76,6 +76,48 @@ def _should_include(r: dict) -> bool:
     return bool(lwd and lwd > LWD_CUTOFF)
 
 
+def test_connection() -> dict:
+    """Returns raw API diagnostic info — use from admin UI to debug response format."""
+    api_key     = os.getenv("DARWINBOX_MASTER_API_KEY", "")
+    dataset_key = os.getenv("DARWINBOX_DATASET_KEY", "")
+    headers     = {"Content-Type": "application/json", "Authorization": _basic_auth()}
+    try:
+        resp = requests.post(
+            MASTER_URL,
+            json={"api_key": api_key, "datasetKey": dataset_key},
+            headers=headers,
+            timeout=30,
+        )
+        info = {"http_status": resp.status_code}
+        try:
+            j = resp.json()
+            info["response_type"] = type(j).__name__
+            if isinstance(j, list):
+                info["format"]            = "list"
+                info["total_records"]     = len(j)
+                info["first_record_keys"] = list(j[0].keys())[:30] if j else []
+            elif isinstance(j, dict):
+                info["format"]          = "dict"
+                info["top_level_keys"]  = list(j.keys())
+                # Find the list inside
+                for k, v in j.items():
+                    if isinstance(v, list) and v:
+                        info["list_key"]          = k
+                        info["total_records"]     = len(v)
+                        info["first_record_keys"] = list(v[0].keys())[:30]
+                        # CTC fields
+                        info["ctc_fields"] = [fk for fk in v[0].keys() if "ctc" in fk.lower()]
+                        break
+            else:
+                info["raw_preview"] = str(j)[:500]
+        except Exception as e:
+            info["parse_error"] = str(e)
+            info["raw_text"]    = resp.text[:500]
+        return info
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def fetch_employee_master() -> list[dict]:
     api_key     = os.getenv("DARWINBOX_MASTER_API_KEY", "")
     dataset_key = os.getenv("DARWINBOX_DATASET_KEY", "")
@@ -93,19 +135,34 @@ def fetch_employee_master() -> list[dict]:
     resp.raise_for_status()
     json_data = resp.json()
 
+    # Handle all known Darwinbox response formats
     if isinstance(json_data, list):
         raw_list = json_data
     elif isinstance(json_data, dict):
-        raw_list = (
-            json_data.get("data") or
-            json_data.get("employees") or
-            json_data.get("result") or []
-        )
+        # Try every known key name
+        raw_list = []
+        for key in ["data", "employees", "result", "employee_details",
+                    "records", "items", "employee_data", "employeeData",
+                    "EmployeeData", "Data", "Results"]:
+            val = json_data.get(key)
+            if isinstance(val, list) and val:
+                raw_list = val
+                break
+        if not raw_list:
+            # dict-of-dicts format: {"0": {...}, "1": {...}}
+            all_vals = [v for v in json_data.values() if isinstance(v, dict)]
+            if all_vals:
+                raw_list = all_vals
     else:
         raw_list = []
 
     if not raw_list:
-        raise ValueError("Darwinbox returned empty employee list")
+        raise ValueError(
+            f"Darwinbox returned empty employee list. "
+            f"Response type: {type(json_data).__name__}. "
+            f"Keys: {list(json_data.keys()) if isinstance(json_data, dict) else 'N/A'}. "
+            f"Use 'Test API Connection' in the Sync tab to inspect the raw response."
+        )
 
     total_before = len(raw_list)
     raw_list = [r for r in raw_list if _should_include(r)]

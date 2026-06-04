@@ -50,7 +50,8 @@ def _r2(n):
 
 
 def calculate_case(employee: dict, input_data: dict) -> dict:
-    group_doj      = _parse_date(employee.get("group_doj"))
+    # Use group_doj for all tenure/severance calculations; fall back to doj if blank
+    group_doj = _parse_date(employee.get("group_doj")) or _parse_date(employee.get("doj"))
     lwd            = _parse_date(input_data.get("last_working_date"))
     dor            = _parse_date(input_data.get("date_of_resignation"))
     sep_reason     = str(input_data.get("separation_reason") or "").strip()
