@@ -1,39 +1,31 @@
-# Employee data layer — fetches from Darwinbox APIs with 1-hour Streamlit cache.
-# No Google Sheet dependency. Data is always fresh (max 1 hour old).
+# Employee data layer.
+# Admin "Force Refresh" → fetches from Darwinbox API → writes to Supabase.
+# All managers read from Supabase (instant DB query, no API call).
 
-import streamlit as st
-from lib.darwinbox import fetch_employee_master
-
-
-@st.cache_data(ttl=3600, show_spinner="Loading employee data…")
-def get_all_employees_cached() -> list[dict]:
-    """
-    Fetches all employees from Darwinbox master + payroll CTC APIs.
-    Cached for 1 hour — refreshes automatically, no manual sync needed.
-    Includes: active employees + those who left after 31 March 2026.
-    """
-    return fetch_employee_master()
+from lib.db import get_client
 
 
 def get_employees_for_manager(manager_email: str) -> list[dict]:
-    """Active direct reports for a given manager email."""
-    email = manager_email.lower().strip()
-    return [
-        e for e in get_all_employees_cached()
-        if e.get("l1_manager_email", "").lower() == email
-        and str(e.get("employee_status", "")).lower() == "active"
-    ]
+    """Instant DB read from Supabase employees table."""
+    sb  = get_client()
+    res = (
+        sb.table("employees")
+        .select("*")
+        .eq("l1_manager_email", manager_email.lower().strip())
+        .eq("employee_status", "Active")
+        .order("full_name")
+        .execute()
+    )
+    return res.data or []
 
 
 def get_employee_by_code(emp_code: str) -> dict | None:
-    for e in get_all_employees_cached():
-        if e.get("emp_code") == emp_code:
-            return e
-    return None
+    sb  = get_client()
+    res = sb.table("employees").select("*").eq("emp_code", emp_code).execute()
+    return res.data[0] if res.data else None
 
 
 def get_employee_count() -> int:
-    try:
-        return len(get_all_employees_cached())
-    except Exception:
-        return 0
+    sb  = get_client()
+    res = sb.table("employees").select("employee_id", count="exact").execute()
+    return res.count or 0

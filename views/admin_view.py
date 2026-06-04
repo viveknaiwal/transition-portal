@@ -226,47 +226,43 @@ def _sync_tab(admin_email: str):
         "Fixed, Variable, PF, Gratuity, Medical for accurate severance calculations."
     )
 
-    from lib.sheets import get_all_employees_cached, get_employee_count
-    from lib.darwinbox import test_connection
+    from lib.sheets import get_employee_count
+    from lib.darwinbox import test_connection, fetch_employee_master
+    from lib.db import upsert_employees
 
-    # Live count
     count = get_employee_count()
     if count > 0:
-        st.metric("Employees currently loaded", count)
+        st.metric("Employees in database", count)
+        st.caption("Managers read from DB instantly — no API call on every login.")
     else:
-        st.warning("No employees loaded yet — click **Test API** to diagnose, then **Force Refresh**.")
+        st.warning("No employees in database yet. Click **Sync from Darwinbox** below.")
 
     col1, col2 = st.columns(2)
 
     with col1:
         if st.button("Test Darwinbox API", use_container_width=True):
-            with st.spinner("Pinging Darwinbox master API…"):
+            with st.spinner("Pinging Darwinbox…"):
                 info = test_connection()
             for k, v in info.items():
                 st.write(f"**{k}:** `{v}`")
 
     with col2:
-        if st.button("Force Refresh Now", type="primary", use_container_width=True):
-            get_all_employees_cached.clear()
-            st.info("Fetching from Darwinbox APIs… **This takes 1-2 minutes** (master + CTC batches). Please wait.")
-            with st.spinner("Step 1/2 — Fetching employees from Darwinbox…"):
+        if st.button("Sync from Darwinbox", type="primary", use_container_width=True):
+            st.info("Fetching master + CTC data from Darwinbox. **Takes 1-2 minutes.** Do this once — managers will be instant after.")
+            with st.spinner("Step 1/2 — Fetching from Darwinbox API…"):
                 try:
-                    from lib.darwinbox import fetch_employee_master
-                    from lib.db import upsert_employees
                     employees = fetch_employee_master()
                 except Exception as e:
                     st.error(f"Darwinbox fetch failed: {e}")
                     st.stop()
-
-            with st.spinner(f"Step 2/2 — Saving {len(employees)} employees to database for role detection…"):
+            with st.spinner(f"Step 2/2 — Saving {len(employees)} employees to database…"):
                 try:
                     count = upsert_employees(employees)
-                    log_audit("EMPLOYEE_SYNC", "SYSTEM", admin_email, f"Synced {count} employees from Darwinbox")
+                    log_audit("EMPLOYEE_SYNC", "SYSTEM", admin_email, f"Synced {count} employees")
+                    st.success(f"Done — **{count}** employees saved. All managers can now log in instantly.")
+                    st.balloons()
                 except Exception as e:
-                    st.warning(f"Saved to cache but Supabase write failed: {e}")
-
-            st.success(f"Done — **{len(employees)}** employees loaded. Managers can now log in.")
-            st.balloons()
+                    st.error(f"Database write failed: {e}")
 
 
 # ── Manage Users tab ───────────────────────────────────────────────────────────
