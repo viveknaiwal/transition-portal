@@ -226,18 +226,7 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
     if phase == "input":
         _section("Case Inputs", "amber")
 
-        # Sep reason ABOVE form → sub-reasons update without affecting date inputs
-        reason_opts = [""] + SEPARATION_REASONS
-        prev_reason = edit_case.get("separation_reason", "") if is_edit else st.session_state.get("cf_s_reason", "")
-        sep_reason  = st.selectbox(
-            "Separation Reason *",
-            reason_opts,
-            index=reason_opts.index(prev_reason) if prev_reason in reason_opts else 0,
-            key="cf_reason_sel",
-        )
-        sub_opts = SUB_REASONS.get(sep_reason, [])
-
-        # st.form → batches all inputs, dates stay closed until submitted
+        # Everything in one st.form — no reruns during input = dates stay closed
         with st.form("case_inputs_form"):
             c1, c2 = st.columns(2)
             with c1:
@@ -248,23 +237,24 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
                 lwd = st.date_input(
                     "Last Working Date *",
                     value=_pd(edit_case.get("last_working_date")) if is_edit else st.session_state.get("cf_s_lwd"),
-                    min_value=_dt.today() if not is_edit else None,
-                    help="Past dates are disabled. LWD must be today or later.",
+                    min_value=_dt.today(),
+                    help="Past dates are greyed out — LWD must be today or later.",
                 )
+                reason_opts = [""] + SEPARATION_REASONS
+                prev_reason = edit_case.get("separation_reason", "") if is_edit else st.session_state.get("cf_s_reason", "")
+                sep_reason  = st.selectbox("Separation Reason *", reason_opts,
+                                            index=reason_opts.index(prev_reason) if prev_reason in reason_opts else 0)
                 notice_opts = ["Serving Notice", "Immediate Exit"]
                 prev_notice = edit_case.get("immediate_exit_or_serving_notice", notice_opts[0]) if is_edit else st.session_state.get("cf_s_notice", notice_opts[0])
                 notice_type = st.selectbox("Notice Type *", notice_opts,
                                             index=notice_opts.index(prev_notice) if prev_notice in notice_opts else 0)
 
             with c2:
+                # Flat sub-reason list (all 6 options — validated on submit)
+                all_subs   = [""] + [s for opts in SUB_REASONS.values() for s in opts]
                 prev_sub   = edit_case.get("separation_sub_reason", "") if is_edit else st.session_state.get("cf_s_sub", "")
-                sub_reason = st.selectbox(
-                    "Separation Sub Reason *",
-                    [""] + sub_opts,
-                    index=(sub_opts.index(prev_sub) + 1) if prev_sub in sub_opts else 0,
-                    disabled=not sep_reason,
-                    help="Select Separation Reason first" if not sep_reason else "",
-                )
+                sub_reason = st.selectbox("Separation Sub Reason *", all_subs,
+                                           index=all_subs.index(prev_sub) if prev_sub in all_subs else 0)
                 garden_opts  = ["No", "Yes", "NA"]
                 prev_garden  = edit_case.get("garden_leave", garden_opts[0]) if is_edit else st.session_state.get("cf_s_garden", garden_opts[0])
                 garden_leave = st.selectbox("Garden Leave *", garden_opts,
@@ -301,28 +291,30 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
             if not lwd:         err.append("Last Working Date")
             if not comm_status: err.append("Communication Status")
             if err:
-                st.error(f"Missing: {', '.join(err)}")
+                st.error(f"Missing required fields: {', '.join(err)}")
+                return
+            if sub_reason and sub_reason not in SUB_REASONS.get(sep_reason, []):
+                st.error(f"'{sub_reason}' is not valid for '{sep_reason}'. Please select the correct sub-reason.")
                 return
             if lwd < dor:
                 st.error("Last Working Date cannot be before Date of Resignation.")
                 return
-            if not is_edit and lwd < _dt.today():
+            if lwd < _dt.today():
                 st.error("Last Working Date cannot be a past date.")
                 return
             if remarks and not approval_file and not existing_url:
                 st.error("Approval document is required when remarks are entered.")
                 return
 
-            # Save inputs to session state → move to preview phase
+            # Save inputs to session state → preview section appears below automatically
             st.session_state.update({
                 "cf_s_reason":  sep_reason,  "cf_s_sub":     sub_reason,
                 "cf_s_dor":     dor,         "cf_s_lwd":     lwd,
                 "cf_s_notice":  notice_type, "cf_s_garden":  garden_leave,
-                "cf_s_comm":    comm_status, "cf_s_remarks":  remarks,
+                "cf_s_comm":    comm_status, "cf_s_remarks": remarks,
                 "cf_s_file":    approval_file, "cf_s_ex_url": existing_url,
                 "cf_phase":     "preview",
             })
-            st.rerun()
 
     # ══ PHASE 2: CALCULATIONS PREVIEW + CONFIRM ════════════════════════════════
     elif phase == "preview":
@@ -380,7 +372,6 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
         bc, cc = st.columns(2)
         if bc.button("← Edit", use_container_width=True):
             st.session_state["cf_phase"] = "input"
-            st.rerun()
 
         if cc.button("✓ Confirm & Create Case", type="primary", use_container_width=True):
             inputs = {
