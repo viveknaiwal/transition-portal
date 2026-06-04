@@ -65,136 +65,170 @@ def _upload_file(file, case_id: str) -> tuple[str, str]:
     return url, file.name
 
 
+def _calc_cards(items: list[tuple]):
+    """Render calculation results as a clean green card grid."""
+    cards = ""
+    for label, value in items:
+        cards += (
+            f'<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;'
+            f'padding:10px 12px;text-align:center;">'
+            f'<div style="font-size:10px;color:#166534;font-weight:800;'
+            f'text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">{label}</div>'
+            f'<div style="font-size:15px;font-weight:800;color:#14532D;">{value}</div>'
+            f'</div>'
+        )
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));'
+        f'gap:8px;margin:8px 0 4px 0;">{cards}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _amount_cards(items: list[tuple]):
+    """Larger cards for monetary amounts."""
+    cards = ""
+    for label, value in items:
+        cards += (
+            f'<div style="background:#DCFCE7;border:1px solid #86EFAC;border-radius:8px;'
+            f'padding:12px 14px;text-align:center;">'
+            f'<div style="font-size:10px;color:#14532D;font-weight:800;'
+            f'text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">{label}</div>'
+            f'<div style="font-size:18px;font-weight:800;color:#15803D;">{value}</div>'
+            f'</div>'
+        )
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));'
+        f'gap:8px;margin:4px 0 8px 0;">{cards}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # ── Case form dialog (create + edit) ──────────────────────────────────────────
 
 @st.dialog("Separation Case", width="large")
 def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
-    is_edit = edit_case is not None
+    from lib.calculations import _parse_date as _pd
+    is_edit  = edit_case is not None
+    emp_code = emp.get("emp_code", "")
+
+    # Reset form state when a different employee is opened
+    if st.session_state.get("_cf_emp") != emp_code:
+        st.session_state["_cf_emp"] = emp_code
+        for k in ["cf_dor", "cf_lwd", "cf_reason", "cf_sub",
+                  "cf_notice", "cf_garden", "cf_comm", "cf_remarks"]:
+            st.session_state.pop(k, None)
+
+    # Set initial values on first open (never overwrite user's selection)
+    if "cf_dor" not in st.session_state:
+        st.session_state["cf_dor"] = _pd(edit_case.get("date_of_resignation")) if is_edit else None
+    if "cf_lwd" not in st.session_state:
+        st.session_state["cf_lwd"] = _pd(edit_case.get("last_working_date")) if is_edit else None
 
     # Employee banner
     st.markdown(
         f"**{emp.get('full_name','')}** &nbsp;|&nbsp; "
         f"{emp.get('grade','')} / {emp.get('band','')} &nbsp;|&nbsp; "
-        f"{emp.get('external_designation','')} &nbsp;|&nbsp; "
-        f"{emp.get('entity','')}",
+        f"{emp.get('external_designation','')} &nbsp;|&nbsp; {emp.get('entity','')}",
         unsafe_allow_html=True,
     )
     st.divider()
     _section("Case Inputs", "amber")
 
-    # ── Dynamic form (no st.form — allows sub-reason to update on reason change) ──
     c1, c2 = st.columns(2)
-
     with c1:
-        def _to_date(v):
-            if not v:
-                return None
-            from lib.calculations import _parse_date
-            return _parse_date(str(v))
+        # No value= param — Streamlit reads from session_state via key
+        dor = st.date_input("Date of Resignation *", key="cf_dor")
+        lwd = st.date_input("Last Working Date *",   key="cf_lwd")
 
-        dor = st.date_input(
-            "Date of Resignation *",
-            value=_to_date(edit_case.get("date_of_resignation")) if is_edit else None,
-            key="cf_dor",
-        )
-        lwd = st.date_input(
-            "Last Working Date *",
-            value=_to_date(edit_case.get("last_working_date")) if is_edit else None,
-            key="cf_lwd",
-        )
+        # Real-time LWD validation
+        if lwd:
+            from datetime import date as _date
+            today = _date.today()
+            if lwd < today:
+                st.error("Last Working Date cannot be a past date.")
+            elif dor and lwd < dor:
+                st.error("Last Working Date cannot be before Date of Resignation.")
 
         reason_opts = [""] + SEPARATION_REASONS
         prev_reason = edit_case.get("separation_reason", "") if is_edit else ""
-        sep_reason = st.selectbox(
-            "Separation Reason *",
-            reason_opts,
-            index=reason_opts.index(prev_reason) if prev_reason in reason_opts else 0,
-            key="cf_reason",
-        )
+        if "cf_reason" not in st.session_state:
+            st.session_state["cf_reason"] = reason_opts.index(prev_reason) if prev_reason in reason_opts else 0
+        sep_reason = st.selectbox("Separation Reason *", reason_opts, key="cf_reason")
 
     with c2:
-        notice_opts = ["Serving Notice", "Immediate Exit"]
-        prev_notice = edit_case.get("immediate_exit_or_serving_notice", notice_opts[0]) if is_edit else notice_opts[0]
-        notice_type = st.selectbox(
-            "Notice Type *",
-            notice_opts,
-            index=notice_opts.index(prev_notice) if prev_notice in notice_opts else 0,
-            key="cf_notice",
-        )
+        notice_opts  = ["Serving Notice", "Immediate Exit"]
+        prev_notice  = edit_case.get("immediate_exit_or_serving_notice", notice_opts[0]) if is_edit else notice_opts[0]
+        if "cf_notice" not in st.session_state:
+            st.session_state["cf_notice"] = notice_opts.index(prev_notice) if prev_notice in notice_opts else 0
+        notice_type  = st.selectbox("Notice Type *",  notice_opts, key="cf_notice")
 
-        garden_opts = ["No", "Yes", "NA"]
-        prev_garden = edit_case.get("garden_leave", garden_opts[0]) if is_edit else garden_opts[0]
-        garden_leave = st.selectbox(
-            "Garden Leave *",
-            garden_opts,
-            index=garden_opts.index(prev_garden) if prev_garden in garden_opts else 0,
-            key="cf_garden",
-        )
+        garden_opts  = ["No", "Yes", "NA"]
+        prev_garden  = edit_case.get("garden_leave", garden_opts[0]) if is_edit else garden_opts[0]
+        if "cf_garden" not in st.session_state:
+            st.session_state["cf_garden"] = garden_opts.index(prev_garden) if prev_garden in garden_opts else 0
+        garden_leave = st.selectbox("Garden Leave *", garden_opts, key="cf_garden")
 
-        sub_opts     = SUB_REASONS.get(sep_reason, [])
-        prev_sub     = edit_case.get("separation_sub_reason", "") if is_edit else ""
-        sub_reason   = st.selectbox(
+        sub_opts   = SUB_REASONS.get(sep_reason, [])
+        prev_sub   = edit_case.get("separation_sub_reason", "") if is_edit else ""
+        sub_reason = st.selectbox(
             "Separation Sub Reason *",
             [""] + sub_opts,
             index=(sub_opts.index(prev_sub) + 1) if prev_sub in sub_opts else 0,
             disabled=not sep_reason,
-            help="Select a Separation Reason first" if not sep_reason else "",
             key="cf_sub",
         )
 
     comm_opts   = [""] + COMMUNICATION_STATUSES
     prev_comm   = edit_case.get("communication_status", "") if is_edit else ""
-    comm_status = st.selectbox(
-        "Communication Status *",
-        comm_opts,
-        index=comm_opts.index(prev_comm) if prev_comm in comm_opts else 0,
-        key="cf_comm",
-    )
+    if "cf_comm" not in st.session_state:
+        st.session_state["cf_comm"] = comm_opts.index(prev_comm) if prev_comm in comm_opts else 0
+    comm_status = st.selectbox("Communication Status *", comm_opts, key="cf_comm")
 
-    prev_remarks = edit_case.get("remarks", "") if is_edit else ""
-    remarks = st.text_area("Remarks / Exception", value=prev_remarks, key="cf_remarks")
+    if "cf_remarks" not in st.session_state:
+        st.session_state["cf_remarks"] = edit_case.get("remarks", "") if is_edit else ""
+    remarks = st.text_area("Remarks / Exception", key="cf_remarks")
 
     existing_file_url  = edit_case.get("approval_file_url", "")  if is_edit else ""
     existing_file_name = edit_case.get("approval_file_name", "") if is_edit else ""
     if existing_file_url:
-        st.link_button(f"Current Approval Doc: {existing_file_name or 'View'}", existing_file_url)
-
+        st.link_button(f"📎 Current Approval Doc: {existing_file_name or 'View'}", existing_file_url)
     approval_file = st.file_uploader(
-        "Upload Approval PDF / Image" + (" (replace existing)" if existing_file_url else ""),
-        type=["pdf", "jpg", "jpeg", "png"],
-        key="cf_file",
+        "Upload Approval PDF" + (" (replace existing)" if existing_file_url else ""),
+        type=["pdf", "jpg", "jpeg", "png"], key="cf_file",
     )
     if remarks and not approval_file and not existing_file_url:
         st.warning("Approval document is mandatory when remarks are entered.")
 
-    # ── Calculations (spec §13 display order) ────────────────────────────────
-    if sep_reason and lwd and dor:
-        calc_prev = calculate_case(emp, {
+    # ── Calculations ──────────────────────────────────────────────────────────
+    if sep_reason and lwd and dor and not (lwd < dor):
+        calc = calculate_case(emp, {
             "last_working_date":               str(lwd),
             "date_of_resignation":             str(dor),
             "separation_reason":               sep_reason,
             "immediate_exit_or_serving_notice": notice_type,
         })
         _section("Calculations", "green")
-        r1c1, r1c2, r1c3, r1c4 = st.columns(4)
-        r1c1.metric("Rehire Status",          calc_prev["rehire_status"] or "—")
-        r1c2.metric("Tenure",                 calc_prev["tenure"] or "—")
-        r1c3.metric("Tenure Cohort",          calc_prev["tenure_cohort"] or "—")
-        r1c4.metric("Tenure Served",          calc_prev["tenure_served"] if calc_prev["tenure_served"] != "" else "—")
 
-        r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-        r2c1.metric("CTC Cohort",             calc_prev["ctc_cohort"] or "—")
-        r2c2.metric("Severance Applicability",calc_prev["severance_applicability"] or "—")
-        r2c3.metric("Severance Days",         calc_prev["severance_days"])
-        r2c4.metric("Notice Period (Days)",   calc_prev["notice_period_days"])
+        # Row 1: info fields
+        _calc_cards([
+            ("Rehire Status",           calc["rehire_status"] or "—"),
+            ("Tenure",                  calc["tenure"] or "—"),
+            ("Tenure Cohort",           calc["tenure_cohort"] or "—"),
+            ("Tenure Served",           str(calc["tenure_served"]) if calc["tenure_served"] != "" else "—"),
+            ("CTC Cohort",              calc["ctc_cohort"] or "—"),
+            ("Severance Applicability", calc["severance_applicability"] or "—"),
+            ("Severance Days",          str(calc["severance_days"])),
+            ("Notice Period (Days)",    str(calc["notice_period_days"])),
+            ("Variable Days (prorata)", str(calc["variable_days_prorata"])),
+        ])
 
-        r3c1, r3c2, r3c3, r3c4 = st.columns(4)
-        r3c1.metric("Variable Days (prorata)",calc_prev["variable_days_prorata"])
-        r3c2.metric("Monthly Fixed Gross",    _inr(calc_prev["monthly_fixed_gross"]))
-        r3c3.metric("Severance Pay Amount",   _inr(calc_prev["severance_pay_amount"]))
-        r3c4.metric("Notice Period Amount",   _inr(calc_prev["notice_period_amount"]))
-
-        st.metric("Variable Pay Amount", _inr(calc_prev["variable_pay_amount"]))
+        # Row 2: monetary amounts
+        _amount_cards([
+            ("Monthly Fixed Gross",   _inr(calc["monthly_fixed_gross"])),
+            ("Severance Pay Amount",  _inr(calc["severance_pay_amount"])),
+            ("Notice Period Amount",  _inr(calc["notice_period_amount"])),
+            ("Variable Pay Amount",   _inr(calc["variable_pay_amount"])),
+        ])
 
     st.divider()
     if not st.button("Submit Case", type="primary", use_container_width=True, key="cf_submit"):
