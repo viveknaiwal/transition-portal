@@ -248,15 +248,25 @@ def _sync_tab(admin_email: str):
     with col2:
         if st.button("Force Refresh Now", type="primary", use_container_width=True):
             get_all_employees_cached.clear()
-            log_audit("CACHE_CLEARED", "SYSTEM", admin_email, "Employee cache cleared — will re-fetch from Darwinbox")
-            st.success("Cache cleared. Reloading from Darwinbox APIs now…")
-            with st.spinner("Fetching from Darwinbox (may take 1-2 mins for CTC batches)…"):
+            st.info("Fetching from Darwinbox APIs… **This takes 1-2 minutes** (master + CTC batches). Please wait.")
+            with st.spinner("Step 1/2 — Fetching employees from Darwinbox…"):
                 try:
-                    employees = get_all_employees_cached()
-                    st.success(f"Loaded **{len(employees)}** employees successfully.")
-                    st.balloons()
+                    from lib.darwinbox import fetch_employee_master
+                    from lib.db import upsert_employees
+                    employees = fetch_employee_master()
                 except Exception as e:
-                    st.error(f"Failed: {e}")
+                    st.error(f"Darwinbox fetch failed: {e}")
+                    st.stop()
+
+            with st.spinner(f"Step 2/2 — Saving {len(employees)} employees to database for role detection…"):
+                try:
+                    count = upsert_employees(employees)
+                    log_audit("EMPLOYEE_SYNC", "SYSTEM", admin_email, f"Synced {count} employees from Darwinbox")
+                except Exception as e:
+                    st.warning(f"Saved to cache but Supabase write failed: {e}")
+
+            st.success(f"Done — **{len(employees)}** employees loaded. Managers can now log in.")
+            st.balloons()
 
 
 # ── Manage Users tab ───────────────────────────────────────────────────────────

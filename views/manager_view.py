@@ -346,15 +346,11 @@ def _show_case_detail(case: dict):
 
 def render_my_team(user_email: str):
     try:
-        employees = get_employees_for_manager(user_email)
+        with st.spinner("Loading employee data from Darwinbox… (first load takes 1-2 mins, then cached for 1 hour)"):
+            employees = get_employees_for_manager(user_email)
     except Exception as e:
-        st.error(
-            "Could not load employee data from Google Sheet.\n\n"
-            f"**Error:** {e}\n\n"
-            "**Fix:** Go to your hr-dashboard Google Sheet → "
-            "File → Share → **Publish to web** → Sheet: Consolidated_Base → "
-            "Format: CSV → Publish → confirm the URL in Streamlit Secrets."
-        )
+        st.error(f"Could not load employee data: {e}")
+        st.info("Ask your Admin to go to **Employee Data tab → Force Refresh Now** to load employees.")
         return
 
     if not employees:
