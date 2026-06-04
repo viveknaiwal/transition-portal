@@ -214,56 +214,49 @@ def _all_cases_tab(admin_email: str):
 # ── Sync tab ───────────────────────────────────────────────────────────────────
 
 def _sync_tab(admin_email: str):
-    st.subheader("Employee Data")
+    st.subheader("Employee Data — Darwinbox API")
 
-    sheet_url = os.getenv("GOOGLE_SHEET_CSV_URL", "")
-
-    if not sheet_url:
-        st.error(
-            "**GOOGLE_SHEET_CSV_URL not set in Streamlit Secrets.**\n\n"
-            "Add this to secrets and redeploy:\n"
-            "`GOOGLE_SHEET_CSV_URL = \"your_published_csv_url\"`"
-        )
-        return
-
-    # ── Auto-refresh status ────────────────────────────────────────────────────
     st.success(
-        "Employee data loads **automatically** from the hr-dashboard "
-        "**Consolidated_Base** Google Sheet — which syncs daily at 7 AM. "
-        "No manual action needed."
+        "Employee data loads **automatically** from Darwinbox APIs "
+        "(master + payroll CTC). Cached for **1 hour** — no manual sync needed."
     )
     st.info(
-        "**How it works:**\n"
-        "- GAS trigger runs at 7 AM → updates `Consolidated_Base` sheet\n"
-        "- Portal caches sheet data for **1 hour** → reads fresh data automatically\n"
-        "- Managers see their updated teams without any admin action"
+        "**What's included:** Active employees + anyone who left after 31 March 2026.\n\n"
+        "**CTC data:** Fetched from the payroll API in batches — includes "
+        "Fixed, Variable, PF, Gratuity, Medical for accurate severance calculations."
     )
 
-    # ── Live count + force refresh ─────────────────────────────────────────────
-    from lib.sheets import get_all_employees_cached, get_sheet_info
-    try:
-        employees = get_all_employees_cached()
-        st.metric("Employees currently loaded", len(employees))
-    except Exception as e:
-        st.error(f"Could not read sheet: {e}")
-        employees = []
+    from lib.sheets import get_all_employees_cached, get_employee_count
+    from lib.darwinbox import test_connection
+
+    # Live count
+    count = get_employee_count()
+    if count > 0:
+        st.metric("Employees currently loaded", count)
+    else:
+        st.warning("No employees loaded yet — click **Test API** to diagnose, then **Force Refresh**.")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("Test Sheet Connection", use_container_width=True):
-            with st.spinner("Checking…"):
-                info = get_sheet_info()
+        if st.button("Test Darwinbox API", use_container_width=True):
+            with st.spinner("Pinging Darwinbox master API…"):
+                info = test_connection()
             for k, v in info.items():
                 st.write(f"**{k}:** `{v}`")
 
     with col2:
-        if st.button("Force Refresh Now", use_container_width=True):
-            # Clear Streamlit cache so next load re-reads the sheet
+        if st.button("Force Refresh Now", type="primary", use_container_width=True):
             get_all_employees_cached.clear()
-            log_audit("CACHE_CLEARED", "SYSTEM", admin_email, "Employee cache force-refreshed")
-            st.success("Cache cleared — employee data will reload from sheet on next page load.")
-            st.rerun()
+            log_audit("CACHE_CLEARED", "SYSTEM", admin_email, "Employee cache cleared — will re-fetch from Darwinbox")
+            st.success("Cache cleared. Reloading from Darwinbox APIs now…")
+            with st.spinner("Fetching from Darwinbox (may take 1-2 mins for CTC batches)…"):
+                try:
+                    employees = get_all_employees_cached()
+                    st.success(f"Loaded **{len(employees)}** employees successfully.")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
 
 
 # ── Manage Users tab ───────────────────────────────────────────────────────────
