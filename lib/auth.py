@@ -38,13 +38,14 @@ def login_page():
 
         if not st.session_state.get("otp_sent"):
             with st.form("login_form"):
-                email = st.text_input("Work Email", placeholder="you@cars24.com")
+                email = st.text_input("Work Email", placeholder="you@cars24.com / you@cariotauto.com")
                 submit = st.form_submit_button("Send OTP" if not DEV_MODE else "Login", type="primary", use_container_width=True)
 
             if submit:
                 email = email.strip().lower()
-                if not email.endswith("@cars24.com"):
-                    st.error("Only @cars24.com emails are allowed.")
+                ALLOWED_DOMAINS = ("@cars24.com", "@cariotauto.com")
+                if not any(email.endswith(d) for d in ALLOWED_DOMAINS):
+                    st.error("Only @cars24.com and @cariotauto.com emails are allowed.")
                     return
                 role = _get_role(email)
                 if not role:
