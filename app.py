@@ -1,5 +1,5 @@
 import streamlit as st
-from lib.auth import login_page, logout
+from lib.auth import login_page, logout, restore_session
 
 st.set_page_config(
     page_title="Transition Portal — Cars24",
@@ -8,12 +8,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Session defaults ───────────────────────────────────────────────────────────
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+# ── Try to restore session from URL token (survives browser refresh) ───────────
+if not st.session_state.get("authenticated"):
+    restore_session()
 
 # ── Not logged in → show login ─────────────────────────────────────────────────
-if not st.session_state.authenticated:
+if not st.session_state.get("authenticated"):
     login_page()
     st.stop()
 
