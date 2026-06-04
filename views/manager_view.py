@@ -190,9 +190,9 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
     old_status = edit_case.get("status", "") if is_edit else ""
     new_status = _get_status(comm_status, old_status)
 
+    # Only fields that exist as columns in the cases table schema
     emp_fields = [
-        "emp_code", "full_name", "company_email_id", "personal_email_id",
-        "personal_mobile_no", "entity", "business_unit", "lob", "function",
+        "emp_code", "entity", "business_unit", "lob", "function",
         "sub_function", "region", "site_name", "grade", "band",
         "external_designation", "internal_designation", "l1_manager",
         "l1_manager_email", "l2_manager", "l2_manager_email", "hrbp_name",
@@ -202,7 +202,8 @@ def _show_case_form(emp: dict, user_email: str, edit_case: dict = None):
     ]
     case_data = {
         **{k: emp.get(k) for k in emp_fields},
-        "emp_name":                          emp["full_name"],
+        # Map employee field names → cases table column names
+        "emp_name":                          emp.get("full_name", ""),
         "official_email":                    emp.get("company_email_id", ""),
         "personal_email":                    emp.get("personal_email_id", ""),
         "personal_contact":                  emp.get("personal_mobile_no", ""),
