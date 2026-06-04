@@ -1,8 +1,9 @@
 import streamlit as st
 from datetime import date
+from lib.sheets import get_employees_for_manager   # live from Google Sheet (1-hr cache)
 from lib.db import (
-    get_employees_for_manager, get_cases_for_manager,
-    create_case, update_case, log_audit, get_client,
+    get_cases_for_manager, create_case, update_case,
+    log_audit, get_client,
     SEPARATION_REASONS, SUB_REASONS, COMMUNICATION_STATUSES,
 )
 from lib.calculations import calculate_case

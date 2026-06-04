@@ -6,6 +6,7 @@ import os
 import re
 import requests
 import pandas as pd
+import streamlit as st
 from io import StringIO
 from dotenv import load_dotenv
 
@@ -185,6 +186,37 @@ def fetch_from_sheet() -> list[dict]:
 
     print(f"Sheet sync: {len(df)} total rows → {len(employees)} included ({skipped} filtered out)")
     return employees
+
+
+@st.cache_data(ttl=3600, show_spinner=False)   # refreshes every 1 hour automatically
+def get_all_employees_cached() -> list[dict]:
+    """
+    Primary employee data source for the portal.
+    Reads Consolidated_Base Google Sheet (updated daily at 7 AM by hr-dashboard GAS).
+    Cached for 1 hour — no manual sync needed.
+    """
+    return fetch_from_sheet()
+
+
+def get_employees_for_manager(manager_email: str) -> list[dict]:
+    """Returns active direct reports for a given manager email."""
+    email = manager_email.lower().strip()
+    return [
+        e for e in get_all_employees_cached()
+        if e.get("l1_manager_email", "").lower() == email
+        and str(e.get("employee_status", "")).lower() == "active"
+    ]
+
+
+def get_employee_by_code(emp_code: str) -> dict | None:
+    for e in get_all_employees_cached():
+        if e.get("emp_code") == emp_code:
+            return e
+    return None
+
+
+def get_employee_count() -> int:
+    return len(get_all_employees_cached())
 
 
 def get_sheet_info() -> dict:

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from lib.db import (
     get_all_cases, get_case, update_case, log_audit,
     get_all_user_roles, upsert_user_role, deactivate_user_role,
-    get_audit_log, get_employee_count, ADMIN_ACTIONS,
+    get_audit_log, ADMIN_ACTIONS,
 )
 from views.manager_view import render_my_team, render_my_cases
 
@@ -214,80 +214,56 @@ def _all_cases_tab(admin_email: str):
 # ── Sync tab ───────────────────────────────────────────────────────────────────
 
 def _sync_tab(admin_email: str):
-    st.subheader("Sync Employee Data")
-    emp_count = get_employee_count()
-
-    if emp_count == 0:
-        st.error("**No employees in database yet.** Sync first before managers can see their teams.")
-    else:
-        st.info(f"**{emp_count}** employees currently in database.")
-
-    # ── Option 1: Google Sheet (recommended) ──────────────────────────────────
-    st.markdown("### Option 1 — Google Sheet (Recommended)")
-    st.caption(
-        "Reads from the hr-dashboard **Consolidated_Base** sheet which already has "
-        "employee + CTC data merged and refreshes daily at 7 AM. No API calls needed."
-    )
+    st.subheader("Employee Data")
 
     sheet_url = os.getenv("GOOGLE_SHEET_CSV_URL", "")
+
     if not sheet_url:
-        st.warning(
-            "**GOOGLE_SHEET_CSV_URL not set.** To use this option:\n\n"
-            "1. Open your hr-dashboard Google Sheet\n"
-            "2. File → Share → **Publish to web**\n"
-            "3. Sheet: **Consolidated_Base** → Format: **CSV** → Publish\n"
-            "4. Copy the URL → add to Streamlit Secrets as `GOOGLE_SHEET_CSV_URL = \"...\"`"
+        st.error(
+            "**GOOGLE_SHEET_CSV_URL not set in Streamlit Secrets.**\n\n"
+            "Add this to secrets and redeploy:\n"
+            "`GOOGLE_SHEET_CSV_URL = \"your_published_csv_url\"`"
         )
-    else:
-        gc1, gc2 = st.columns(2)
-        with gc1:
-            if st.button("Test Sheet Connection", use_container_width=True):
-                with st.spinner("Checking sheet…"):
-                    from lib.sheets import get_sheet_info
-                    info = get_sheet_info()
-                for k, v in info.items():
-                    st.write(f"**{k}:** `{v}`")
-        with gc2:
-            if st.button("Sync from Google Sheet", type="primary", use_container_width=True):
-                with st.spinner("Reading Consolidated_Base sheet…"):
-                    try:
-                        from lib.sheets import fetch_from_sheet
-                        from lib.db import upsert_employees
-                        employees = fetch_from_sheet()
-                        count     = upsert_employees(employees)
-                        log_audit("SHEET_SYNC", "SYSTEM", admin_email, f"Synced {count} employees from Google Sheet")
-                        st.success(f"Sync complete — **{count}** employees upserted from Google Sheet.")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"Sheet sync failed: {e}")
+        return
 
-    st.divider()
+    # ── Auto-refresh status ────────────────────────────────────────────────────
+    st.success(
+        "Employee data loads **automatically** from the hr-dashboard "
+        "**Consolidated_Base** Google Sheet — which syncs daily at 7 AM. "
+        "No manual action needed."
+    )
+    st.info(
+        "**How it works:**\n"
+        "- GAS trigger runs at 7 AM → updates `Consolidated_Base` sheet\n"
+        "- Portal caches sheet data for **1 hour** → reads fresh data automatically\n"
+        "- Managers see their updated teams without any admin action"
+    )
 
-    # ── Option 2: Darwinbox API directly ──────────────────────────────────────
-    st.markdown("### Option 2 — Darwinbox API (Fallback)")
-    st.caption("Hits Darwinbox master API directly. CTC data may be incomplete as it needs a separate payroll API call.")
+    # ── Live count + force refresh ─────────────────────────────────────────────
+    from lib.sheets import get_all_employees_cached, get_sheet_info
+    try:
+        employees = get_all_employees_cached()
+        st.metric("Employees currently loaded", len(employees))
+    except Exception as e:
+        st.error(f"Could not read sheet: {e}")
+        employees = []
 
-    dc1, dc2 = st.columns(2)
-    with dc1:
-        if st.button("Test Darwinbox API", use_container_width=True):
-            with st.spinner("Pinging Darwinbox…"):
-                from lib.darwinbox import test_connection
-                info = test_connection()
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Test Sheet Connection", use_container_width=True):
+            with st.spinner("Checking…"):
+                info = get_sheet_info()
             for k, v in info.items():
                 st.write(f"**{k}:** `{v}`")
-    with dc2:
-        if st.button("Sync from Darwinbox", use_container_width=True):
-            with st.spinner("Fetching from Darwinbox API… (1-2 mins)"):
-                try:
-                    from lib.darwinbox import fetch_employee_master
-                    from lib.db import upsert_employees
-                    employees = fetch_employee_master()
-                    count     = upsert_employees(employees)
-                    log_audit("DARWINBOX_SYNC", "SYSTEM", admin_email, f"Synced {count} employees from API")
-                    st.success(f"Sync complete — **{count}** employees upserted.")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"Sync failed: {e}")
+
+    with col2:
+        if st.button("Force Refresh Now", use_container_width=True):
+            # Clear Streamlit cache so next load re-reads the sheet
+            get_all_employees_cached.clear()
+            log_audit("CACHE_CLEARED", "SYSTEM", admin_email, "Employee cache force-refreshed")
+            st.success("Cache cleared — employee data will reload from sheet on next page load.")
+            st.rerun()
 
 
 # ── Manage Users tab ───────────────────────────────────────────────────────────
