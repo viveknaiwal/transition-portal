@@ -266,6 +266,37 @@ def _sync_tab(admin_email: str):
     else:
         st.warning("No employees in database yet. Click **Sync from Darwinbox** below.")
 
+    # ── Debug: check raw employee data in Supabase ────────────────────────────
+    with st.expander("Debug — Check Employee Data in Database"):
+        st.caption("Use this to verify group_doj and CTC are stored correctly after sync.")
+        debug_code = st.text_input("Enter Emp Code to inspect", placeholder="e.g. 12345")
+        if debug_code:
+            from lib.db import get_client
+            sb  = get_client()
+            res = sb.table("employees").select(
+                "emp_code,full_name,group_doj,doj,total_ctc,fixed_ctc,variable,"
+                "provident_fund,gratuity,medical_insurance,monthly_gross,employee_status"
+            ).eq("emp_code", debug_code.strip()).execute()
+            if res.data:
+                e = res.data[0]
+                dc1, dc2, dc3 = st.columns(3)
+                dc1.write(f"**Name:** {e.get('full_name')}")
+                dc1.write(f"**Status:** {e.get('employee_status')}")
+                dc1.write(f"**DOJ:** `{e.get('doj')}`")
+                dc1.write(f"**Group DOJ:** `{e.get('group_doj')}`")
+                dc2.write(f"**Total CTC:** {e.get('total_ctc')}")
+                dc2.write(f"**Fixed CTC:** {e.get('fixed_ctc')}")
+                dc2.write(f"**Variable:** {e.get('variable')}")
+                dc3.write(f"**PF:** {e.get('provident_fund')}")
+                dc3.write(f"**Gratuity:** {e.get('gratuity')}")
+                dc3.write(f"**Medical:** {e.get('medical_insurance')}")
+                if not e.get('group_doj'):
+                    st.error("group_doj is BLANK — this is why Tenure shows empty. Re-sync from Darwinbox.")
+                if not e.get('total_ctc') or float(e.get('total_ctc') or 0) == 0:
+                    st.error("Total CTC is 0 — payroll API data missing. Add DARWINBOX_PAYROLL_API_KEY to secrets and re-sync.")
+            else:
+                st.warning(f"No employee found with code: {debug_code}")
+
     col1, col2 = st.columns(2)
 
     with col1:
