@@ -108,6 +108,17 @@ def _should_include(r: dict) -> bool:
     return d > LWD_CUTOFF
 
 
+_NULL_VALS = {"", "-", "--", "n.a", "n/a", "na", "null", "none", "nil",
+              "0000-00-00", "00-00-0000", "not applicable", "not available"}
+
+def _clean_date_str(v) -> str:
+    """Return empty string if value is null-like (N.A, NA, -, null etc.), else return as-is."""
+    s = str(v or "").strip()
+    if s.lower().replace(".", "").replace(" ", "").replace("/", "") in _NULL_VALS:
+        return ""
+    return s
+
+
 def _find(obj: dict, *keys) -> float:
     """Find first non-zero numeric value from a list of possible field names."""
     for k in keys:
@@ -266,15 +277,15 @@ def fetch_employee_master() -> list[dict]:
 
         monthly_gross = (total_ctc - gratuity - pf - medical) / 12 if total_ctc > 0 else 0
 
-        # DOJ: try all known Darwinbox field names, group_doj preferred
-        doj = str(
+        # DOJ: clean null-like values (N.A, -, null etc.), group_doj falls back to doj
+        doj = _clean_date_str(
             r.get("date_of_joining") or r.get("joining_date") or
             r.get("doj") or r.get("dateofjoining") or ""
-        ).strip()
-        group_doj = str(
+        )
+        group_doj = _clean_date_str(
             r.get("group_date_of_joining") or r.get("group_doj") or
-            r.get("group_joining_date") or doj
-        ).strip()
+            r.get("group_joining_date") or ""
+        ) or doj   # ← falls back to DOJ if group_doj is blank/N.A
 
         employees.append({
             "employee_id":          emp_id,
