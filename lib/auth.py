@@ -7,64 +7,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEV_MODE     = os.getenv("DEV_MODE", "false").lower() == "true"
-SESSION_DAYS = 7   # how many days before token expires and user must log in again
-
-
-# ── Session token (URL query param) ───────────────────────────────────────────
-
-def _encode_token(email: str) -> str:
-    data = f"{email}:{int(time.time())}"
-    return base64.urlsafe_b64encode(data.encode()).decode()
-
-
-def _decode_token(token: str) -> str | None:
-    """Returns email if token is valid and not expired, else None."""
-    try:
-        decoded = base64.urlsafe_b64decode(token.encode()).decode()
-        email, ts = decoded.rsplit(":", 1)
-        if int(time.time()) - int(ts) < SESSION_DAYS * 86400:
-            return email
-    except Exception:
-        pass
-    return None
-
-
-def restore_session() -> bool:
-    """
-    Called on every page load before showing login.
-    Checks URL for a saved session token — restores login if valid.
-    Returns True if user was auto-logged in.
-    """
-    if st.session_state.get("authenticated"):
-        return True
-
-    token = st.query_params.get("t", "")
-    if not token:
-        return False
-
-    email = _decode_token(token)
-    if not email:
-        # Token expired — remove it silently
-        try:
-            del st.query_params["t"]
-        except Exception:
-            pass
-        return False
-
-    role = _get_role(email)
-    if not role:
-        return False
-
-    st.session_state.authenticated = True
-    st.session_state.user_email    = email
-    st.session_state.role          = role
-    return True
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
 
 def _set_token(email: str):
+    """Store session token in URL so refresh doesn't log user out."""
     try:
-        st.query_params["t"] = _encode_token(email)
+        data  = f"{email}:{int(time.time())}"
+        token = base64.urlsafe_b64encode(data.encode()).decode()
+        st.query_params["t"] = token
     except Exception:
         pass
 

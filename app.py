@@ -1,5 +1,7 @@
+import time
+import base64
 import streamlit as st
-from lib.auth import login_page, logout, restore_session
+from lib.auth import login_page, logout
 
 st.set_page_config(
     page_title="Transition Portal — Cars24",
@@ -8,9 +10,32 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Try to restore session from URL token (survives browser refresh) ───────────
-if not st.session_state.get("authenticated"):
-    restore_session()
+
+def _restore_session():
+    """Check URL token and auto-login if valid (survives browser refresh)."""
+    if st.session_state.get("authenticated"):
+        return
+    token = st.query_params.get("t", "")
+    if not token:
+        return
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        email, ts = decoded.rsplit(":", 1)
+        if int(time.time()) - int(ts) > 7 * 86400:   # 7-day expiry
+            del st.query_params["t"]
+            return
+        from lib.db import get_user_role
+        role = get_user_role(email)
+        if role:
+            st.session_state.authenticated = True
+            st.session_state.user_email    = email
+            st.session_state.role          = role
+    except Exception:
+        pass
+
+
+# Restore session from URL token on every page load
+_restore_session()
 
 # ── Not logged in → show login ─────────────────────────────────────────────────
 if not st.session_state.get("authenticated"):
