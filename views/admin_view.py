@@ -123,7 +123,7 @@ def _show_case_detail(case_id: str, admin_email: str):
     # ── Admin actions ──────────────────────────────────────────────────────────
     st.divider()
     is_closed = str(c.get("closure_status", "")).lower() == "closed"
-    email_sent = str(c.get("email_sent", "")).lower() == "sent"
+    email_sent = bool(c.get("email_sent", False))
 
     if is_closed:
         if st.session_state.pop(f"_show_closed_toast_{case_id}", False):
@@ -141,7 +141,7 @@ def _show_case_detail(case_id: str, admin_email: str):
                         from lib.email_utils import send_closure_email
                         send_closure_email(c)
                         update_case(case_id, {
-                            "email_sent":        "Sent",
+                            "email_sent":        True,
                             "email_sent_at":     _now(),
                             "email_sent_status": "Sent",
                         })
