@@ -349,7 +349,7 @@ def _users_tab(admin_email: str):
     st.subheader("Add ADMIN or PAYROLL User")
     with st.form("add_user"):
         new_email = st.text_input("Email (@cars24.com)")
-        new_role  = st.selectbox("Role", ["ADMIN", "PAYROLL"])
+        new_role  = st.selectbox("Role", ["ADMIN", "PAYROLL", "HRBP"])
         if st.form_submit_button("Add User", type="primary"):
             email = new_email.strip().lower()
             if not email.endswith("@cars24.com"):

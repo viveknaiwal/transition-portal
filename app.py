@@ -69,5 +69,9 @@ elif role == "PAYROLL":
     from views.payroll_view import payroll_dashboard
     payroll_dashboard(user_email)
 
+elif role == "HRBP":
+    from views.hrbp_view import hrbp_dashboard
+    hrbp_dashboard(user_email)
+
 else:
     st.error("Access denied. Contact HR admin.")
