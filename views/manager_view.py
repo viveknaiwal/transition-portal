@@ -351,8 +351,9 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
                 if f in edit_case:
                     case_data[f] = edit_case[f]
             if old_status.lower() in ("sent back","sentback"):
-                for f in ("admin_action","sent_back_at","sent_back_by"):
-                    case_data[f] = ""
+                case_data["admin_action"]  = ""
+                case_data["sent_back_at"]  = None   # timestamp column — must be None not ""
+                case_data["sent_back_by"]  = ""
 
         with st.spinner("Saving…"):
             if is_edit:
