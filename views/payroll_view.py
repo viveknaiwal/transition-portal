@@ -166,20 +166,66 @@ def payroll_dashboard(user_email: str):
             st.divider()
             for case in cases:
                 with st.expander(
-                    f"**{case['case_id']}** — {case.get('emp_name','')} — LWD: {case.get('last_working_date','')}"
+                    f"**{case['case_id']}** — {case.get('emp_name','')} "
+                    f"| {case.get('entity','')} | {case.get('grade','')} "
+                    f"| LWD: {case.get('last_working_date','')}"
                 ):
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Severance Pay",     _inr(case.get("severance_pay_amount")))
-                    c2.metric("Notice Period Amt", _inr(case.get("notice_period_amount")))
-                    c3.metric("Variable Pay",      _inr(case.get("variable_pay_amount")))
-                    st.write(
-                        f"**Entity:** {case.get('entity','')} &nbsp;|&nbsp; "
-                        f"**Grade:** {case.get('grade','')} &nbsp;|&nbsp; "
-                        f"**Tenure:** {case.get('tenure','')} &nbsp;|&nbsp; "
-                        f"**Rehire:** {case.get('rehire_status','')}"
-                    )
+                    # ── Employee info ──────────────────────────────────────────
+                    i1, i2, i3 = st.columns(3)
+                    i1.write(f"**Emp Code:** {case.get('emp_code','')}")
+                    i1.write(f"**Official Email:** {case.get('official_email','')}")
+                    i1.write(f"**Personal Email:** {case.get('personal_email','')}")
+                    i1.write(f"**Contact:** {case.get('personal_contact','')}")
+                    i2.write(f"**Entity / BU:** {case.get('entity','')} / {case.get('business_unit','')}")
+                    i2.write(f"**Grade / Band:** {case.get('grade','')} / {case.get('band','')}")
+                    i2.write(f"**Designation:** {case.get('external_designation','')}")
+                    i2.write(f"**Gender:** {case.get('gender','')}")
+                    i3.write(f"**DOJ:** {case.get('doj','')}  |  **Group DOJ:** {case.get('group_doj','')}")
+                    i3.write(f"**DOR:** {case.get('date_of_resignation','')}  |  **LWD:** {case.get('last_working_date','')}")
+                    i3.write(f"**Tenure:** {case.get('tenure','')}  |  **Served:** {case.get('tenure_served','')}")
+                    i3.write(f"**Tenure Cohort:** {case.get('tenure_cohort','')}  |  **CTC Cohort:** {case.get('ctc_cohort','')}")
+
+                    st.divider()
+
+                    # ── FNF amounts + days ─────────────────────────────────────
+                    st.caption("FNF Calculations")
+                    m1, m2, m3, m4, m5, m6 = st.columns(6)
+                    m1.metric("Monthly Fixed Gross",  _inr(case.get("monthly_fixed_gross")))
+                    m2.metric("Severance Pay",         _inr(case.get("severance_pay_amount")))
+                    m3.metric("Severance Days",        case.get("severance_days", 0))
+                    m4.metric("Notice Period Amt",     _inr(case.get("notice_period_amount")))
+                    m5.metric("Notice Period Days",    case.get("notice_period_days", 0))
+                    m6.metric("Variable Pay",          _inr(case.get("variable_pay_amount")))
+
+                    # ── CTC breakdown ──────────────────────────────────────────
+                    st.caption("CTC Breakdown")
+                    t1, t2, t3, t4, t5, t6 = st.columns(6)
+                    t1.metric("Fixed CTC",       _inr(case.get("fixed_ctc")))
+                    t2.metric("Variable",         _inr(case.get("variable")))
+                    t3.metric("Total CTC",        _inr(case.get("total_ctc")))
+                    t4.metric("Provident Fund",   _inr(case.get("provident_fund")))
+                    t5.metric("Gratuity",         _inr(case.get("gratuity")))
+                    t6.metric("Medical Insurance",_inr(case.get("medical_insurance")))
+
+                    st.divider()
+
+                    # ── Separation details ─────────────────────────────────────
+                    s1, s2 = st.columns(2)
+                    s1.write(f"**Reason:** {case.get('separation_reason','')} — {case.get('separation_sub_reason','')}")
+                    s1.write(f"**Notice Type:** {case.get('immediate_exit_or_serving_notice','')}  |  **Garden Leave:** {case.get('garden_leave','')}")
+                    s1.write(f"**Severance Applicability:** {case.get('severance_applicability','')}")
+                    s1.write(f"**Rehire Status:** {case.get('rehire_status','')}")
+                    s2.write(f"**HRBP:** {case.get('hrbp_name','')} ({case.get('hrbp_mail_id','')})")
+                    s2.write(f"**L1 Manager:** {case.get('l1_manager','')} ({case.get('l1_manager_email','')})")
+                    s2.write(f"**Closed By:** {case.get('admin_closed_by','')}  |  **At:** {str(case.get('admin_closed_at',''))[:10]}")
+                    s2.write(f"**Email Sent:** {case.get('email_sent','')}  |  **At:** {str(case.get('email_sent_at',''))[:10]}")
+
+                    if case.get("remarks"):
+                        st.info(f"Remarks: {case['remarks']}")
+                    if case.get("admin_remarks"):
+                        st.warning(f"Admin Remarks: {case['admin_remarks']}")
                     if case.get("approval_file_url"):
-                        st.link_button("View Approval Document", case["approval_file_url"])
+                        st.link_button("📎 View Approval Document", case["approval_file_url"])
 
     # ── Tab 2: All cases read-only ─────────────────────────────────────────────
     with tab2:
@@ -193,8 +239,35 @@ def payroll_dashboard(user_email: str):
                 file_name="all_cases.csv",
                 mime="text/csv",
             )
-            display = ["case_id", "emp_name", "entity", "grade", "last_working_date",
-                       "separation_reason", "status", "closure_status",
-                       "severance_pay_amount", "notice_period_amount", "variable_pay_amount"]
-            rows = [{col: c.get(col, "") for col in display} for c in all_cases]
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            display = [
+                ("Case ID",              "case_id"),
+                ("Emp Code",             "emp_code"),
+                ("Emp Name",             "emp_name"),
+                ("Entity",               "entity"),
+                ("Grade",                "grade"),
+                ("Designation",          "external_designation"),
+                ("DOJ",                  "doj"),
+                ("Group DOJ",            "group_doj"),
+                ("DOR",                  "date_of_resignation"),
+                ("LWD",                  "last_working_date"),
+                ("Tenure",               "tenure"),
+                ("Reason",               "separation_reason"),
+                ("Notice Type",          "immediate_exit_or_serving_notice"),
+                ("Garden Leave",         "garden_leave"),
+                ("Severance Applicable", "severance_applicability"),
+                ("Sev Days",             "severance_days"),
+                ("Sev Pay",              "severance_pay_amount"),
+                ("Notice Days",          "notice_period_days"),
+                ("Notice Pay",           "notice_period_amount"),
+                ("Variable Pay",         "variable_pay_amount"),
+                ("Monthly Fixed Gross",  "monthly_fixed_gross"),
+                ("Rehire",               "rehire_status"),
+                ("Status",               "status"),
+                ("Closure Status",       "closure_status"),
+                ("Email Sent",           "email_sent"),
+                ("HRBP",                 "hrbp_name"),
+                ("L1 Manager",           "l1_manager"),
+            ]
+            rows = [{lbl: c.get(col, "") for lbl, col in display} for c in all_cases]
+            st.dataframe(pd.DataFrame(rows, columns=[d[0] for d in display]),
+                         use_container_width=True, hide_index=True)
