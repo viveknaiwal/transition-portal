@@ -9,6 +9,43 @@ from lib.db import (
 from lib.calculations import calculate_case, _parse_date as _pd
 
 
+# ── Design system ──────────────────────────────────────────────────────────────
+
+_CSS = """<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+.stApp, .stMarkdown, .stTextInput input, .stSelectbox select,
+.stTextArea textarea, .stDateInput input, .stButton button,
+.stFileUploader, .stCaption, .stSubheader {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+.stButton > button[kind="primary"] {
+  background: #4736FE !important;
+  border: none !important;
+  font-weight: 800 !important;
+  border-radius: 9px !important;
+}
+.stButton > button[kind="primary"]:hover {
+  background: #3628e0 !important;
+  box-shadow: 0 3px 12px rgba(71,54,254,.3) !important;
+}
+.stButton > button:not([kind="primary"]) {
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+}
+.stTabs [data-baseweb="tab"] {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-weight: 600 !important;
+}
+.stTabs [aria-selected="true"] { color: #4736FE !important; }
+.stTabs [data-baseweb="tab-highlight"] { background: #4736FE !important; }
+</style>"""
+
+
+def _inject_css():
+    st.markdown(_CSS, unsafe_allow_html=True)
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _inr(v):
@@ -18,59 +55,79 @@ def _inr(v):
         return "₹0"
 
 
-def _section(title, color="blue"):
-    palette = {
-        "blue":   ("#EFF6FF", "#1D4ED8", "#3B82F6"),
-        "purple": ("#F5F3FF", "#5B21B6", "#7C3AED"),
-        "amber":  ("#FFFBEB", "#92400E", "#F59E0B"),
-        "green":  ("#F0FDF4", "#14532D", "#22C55E"),
+def _avatar(name: str, size: int = 34) -> str:
+    initials = "".join(w[0].upper() for w in str(name).split() if w)[:2] or "?"
+    fs = max(10, size // 3)
+    return (
+        f'<div style="width:{size}px;height:{size}px;border-radius:50%;'
+        f'background:#EEF0FF;color:#4736FE;font-size:{fs}px;font-weight:800;'
+        f'display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">'
+        f'{initials}</div>'
+    )
+
+
+def _section(title, color="default", icon=""):
+    COLORS = {
+        "blue":    ("#1D4ED8", "#BFDBFE"),
+        "amber":   ("#92400E", "#FDE68A"),
+        "green":   ("#059669", "#BBF7D0"),
+        "purple":  ("#5B21B6", "#DDD6FE"),
+        "default": ("#9CA3AF", "#F3F4F6"),
     }
-    bg, text, border = palette.get(color, ("#F9FAFB", "#374151", "#9CA3AF"))
+    clr, border = COLORS.get(color, COLORS["default"])
+    prefix = f"{icon}&nbsp;" if icon else ""
     st.markdown(
-        f'<div style="background:{bg};border-left:4px solid {border};padding:10px 14px;'
-        f'border-radius:6px;margin:16px 0 8px 0;">'
-        f'<span style="color:{text};font-weight:800;font-size:14px;">{title}</span></div>',
+        f'<div style="font-family:\'Plus Jakarta Sans\',sans-serif;font-size:10px;font-weight:800;'
+        f'text-transform:uppercase;letter-spacing:.7px;color:{clr};margin:16px 0 10px 0;'
+        f'padding-bottom:8px;border-bottom:1px solid {border};">{prefix}{title}</div>',
         unsafe_allow_html=True,
     )
 
 
 def _chip(status):
     S = {
-        "Pending":       ("FEF3C7","92400E"), "Hold":         ("FEE2E2","991B1B"),
-        "Submitted":     ("DBEAFE","1D4ED8"), "Sent Back":    ("FCE7F3","9D174D"),
-        "Admin Closed":  ("D1FAE5","065F46"), "FNF Processed":("D1FAE5","065F46"),
+        "Pending":       ("#FFFBEB", "#92400E"),
+        "Hold":          ("#FEF2F2", "#991B1B"),
+        "Submitted":     ("#EFF6FF", "#1D4ED8"),
+        "Sent Back":     ("#FCE7F3", "#9D174D"),
+        "Admin Closed":  ("#ECFDF5", "#065F46"),
+        "FNF Processed": ("#ECFDF5", "#065F46"),
     }
-    bg, fg = S.get(str(status), ("F3F4F6","6B7280"))
-    return f'<span style="background:#{bg};color:#{fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;">{status}</span>'
+    bg, fg = S.get(str(status), ("#F3F4F6", "#6B7280"))
+    return (
+        f'<span style="background:{bg};color:{fg};padding:3px 9px;'
+        f'border-radius:999px;font-size:10.5px;font-weight:700;">{status}</span>'
+    )
 
 
 def _calc_cards(items):
-    cards = "".join(
-        f'<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;'
-        f'padding:10px 12px;text-align:center;">'
-        f'<div style="font-size:10px;color:#166534;font-weight:800;'
-        f'text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">{lbl}</div>'
-        f'<div style="font-size:15px;font-weight:800;color:#14532D;">{val}</div></div>'
+    tiles = "".join(
+        f'<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;'
+        f'padding:10px 6px;text-align:center;">'
+        f'<div style="font-size:9px;color:#065F46;font-weight:800;text-transform:uppercase;'
+        f'letter-spacing:.4px;margin-bottom:4px;">{lbl}</div>'
+        f'<div style="font-size:14px;font-weight:800;color:#14532D;">{val}</div></div>'
         for lbl, val in items
     )
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));'
-        f'gap:8px;margin:8px 0;">{cards}</div>', unsafe_allow_html=True,
+        f'<div style="display:grid;grid-template-columns:repeat(3,1fr);'
+        f'gap:8px;margin-bottom:10px;">{tiles}</div>',
+        unsafe_allow_html=True,
     )
 
 
 def _amount_cards(items):
-    cards = "".join(
+    tiles = "".join(
         f'<div style="background:#DCFCE7;border:1px solid #86EFAC;border-radius:8px;'
-        f'padding:12px 14px;text-align:center;">'
-        f'<div style="font-size:10px;color:#14532D;font-weight:800;'
-        f'text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">{lbl}</div>'
-        f'<div style="font-size:18px;font-weight:800;color:#15803D;">{val}</div></div>'
+        f'padding:11px 8px;text-align:center;">'
+        f'<div style="font-size:9px;color:#14532D;font-weight:800;text-transform:uppercase;'
+        f'letter-spacing:.4px;margin-bottom:4px;">{lbl}</div>'
+        f'<div style="font-size:15px;font-weight:800;color:#15803D;">{val}</div></div>'
         for lbl, val in items
     )
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));'
-        f'gap:8px;margin:4px 0 8px 0;">{cards}</div>', unsafe_allow_html=True,
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">{tiles}</div>',
+        unsafe_allow_html=True,
     )
 
 
@@ -81,13 +138,14 @@ def _upload_file(file, case_id):
     return sb.storage.from_("attachments").get_public_url(path), file.name
 
 
-# ── Inline case form — no dialog, no st.form, live calculations ───────────────
+# ── Case form ──────────────────────────────────────────────────────────────────
 
 def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
     is_edit  = edit_case is not None
     emp_code = emp.get("emp_code", "")
+    name     = emp.get("full_name", "")
 
-    # One-time initialisation of form values for this employee
+    # One-time init
     init_key = f"_cf_init_{emp_code}_{'edit' if is_edit else 'new'}"
     if init_key not in st.session_state:
         st.session_state["cf_dor"]    = _pd(edit_case.get("date_of_resignation")) if is_edit else None
@@ -100,22 +158,36 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
         st.session_state["cf_rem"]    = edit_case.get("remarks","")               if is_edit else ""
         st.session_state[init_key]    = True
 
-    # ── Two-column layout: inputs left, details + calcs right ────────────────
+    # ── Dark form header ───────────────────────────────────────────────────────
+    initials = "".join(w[0].upper() for w in name.split() if w)[:2] or "?"
+    action   = "Edit Separation" if is_edit else "Initiate Separation"
+    st.markdown(
+        f'<div style="background:#0F0E1A;padding:16px 20px;border-radius:10px 10px 0 0;'
+        f'display:flex;align-items:center;gap:14px;margin-bottom:0;">'
+        f'<div style="width:42px;height:42px;border-radius:50%;background:rgba(71,54,254,.2);'
+        f'color:#7B6FFF;font-size:15px;font-weight:800;display:flex;align-items:center;'
+        f'justify-content:center;flex-shrink:0;">{initials}</div>'
+        f'<div><div style="color:#fff;font-size:15px;font-weight:800;'
+        f'font-family:\'Plus Jakarta Sans\',sans-serif;">{action} — {name}</div>'
+        f'<div style="color:#6B7280;font-size:12px;margin-top:2px;">'
+        f'{emp_code} · {emp.get("external_designation","")} · '
+        f'{emp.get("grade","")} · {emp.get("entity","")}'
+        f'</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Two-column layout ──────────────────────────────────────────────────────
     left, right = st.columns([1, 1], gap="large")
 
     with left:
-        _section("Case Inputs", "amber")
+        _section("Case Inputs", "amber", "📝")
 
         dor = st.date_input("Date of Resignation *", key="cf_dor")
         lwd = st.date_input("Last Working Date *", key="cf_lwd",
-                             min_value=date.today(),
-                             help="Past dates are greyed out")
+                             min_value=date.today(), help="Past dates are greyed out")
 
-        if lwd and dor:
-            if lwd < dor:
-                st.error("LWD cannot be before Date of Resignation.")
-        elif lwd and lwd < date.today():
-            st.error("LWD cannot be a past date.")
+        if lwd and dor and lwd < dor:
+            st.error("LWD cannot be before Date of Resignation.")
 
         reason_opts = [""] + SEPARATION_REASONS
         sep_reason  = st.selectbox("Separation Reason *", reason_opts, key="cf_reason")
@@ -148,18 +220,38 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
             st.warning("Approval document required when remarks are entered.")
 
     with right:
-        # ── Employee details (always visible) ─────────────────────────────────
-        _section("Employee Details", "blue")
-        st.markdown(f"**{emp.get('full_name','')}**  &nbsp;·&nbsp; {emp.get('external_designation','')}")
-        d1, d2 = st.columns(2)
-        d1.write(f"**Grade / Band:** {emp.get('grade','')} / {emp.get('band','')}")
-        d2.write(f"**Entity:** {emp.get('entity','')}")
-        d1.write(f"**DOJ:** {emp.get('group_doj','') or emp.get('doj','')}")
-        d2.write(f"**HRBP:** {emp.get('hrbp_name','')}")
-        d1.write(f"**L1:** {emp.get('l1_manager','')}")
-        d2.write(f"**L2:** {emp.get('l2_manager','')}")
+        # ── Employee card ──────────────────────────────────────────────────────
+        _section("Employee Profile", "blue", "👤")
+        doj = emp.get("group_doj","") or emp.get("doj","")
+        meta_rows = [
+            ("Grade / Band",   f'{emp.get("grade","")} / {emp.get("band","")}'),
+            ("Entity",         emp.get("entity","")),
+            ("Date of Joining", doj),
+            ("HRBP",           emp.get("hrbp_name","")),
+            ("L1 Manager",     emp.get("l1_manager","")),
+            ("L2 Manager",     emp.get("l2_manager","")),
+        ]
+        meta_html = "".join(
+            f'<div><div style="font-size:9.5px;font-weight:700;color:#9CA3AF;'
+            f'text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">{lbl}</div>'
+            f'<div style="font-size:12px;color:#374151;font-weight:600;">{val or "—"}</div></div>'
+            for lbl, val in meta_rows
+        )
+        st.markdown(
+            f'<div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;'
+            f'padding:14px;margin-bottom:4px;">'
+            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+            f'{_avatar(name, 40)}'
+            f'<div><div style="font-size:14px;font-weight:800;color:#111827;'
+            f'font-family:\'Plus Jakarta Sans\',sans-serif;">{name}</div>'
+            f'<div style="font-size:11.5px;color:#6B7280;margin-top:1px;">'
+            f'{emp.get("external_designation","")} · {emp_code}</div></div></div>'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+            f'{meta_html}</div></div>',
+            unsafe_allow_html=True,
+        )
 
-        # ── Live calculations (update as user fills inputs) ───────────────────
+        # ── Live calculations (logic untouched, only display updated) ──────────
         if sep_reason and dor and lwd and lwd >= dor:
             calc = calculate_case(emp, {
                 "last_working_date":                str(lwd),
@@ -167,7 +259,7 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
                 "separation_reason":                sep_reason,
                 "immediate_exit_or_serving_notice": notice_type,
             })
-            _section("Live Calculations", "green")
+            _section("Live Calculations", "green", "⚡")
             _calc_cards([
                 ("Rehire Status",           calc["rehire_status"] or "—"),
                 ("Tenure",                  calc["tenure"] or "—"),
@@ -188,12 +280,17 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
         elif sep_reason and dor and lwd and lwd < dor:
             st.error("LWD cannot be before DOR — calculations hidden.")
         else:
-            st.info("Fill in Dates + Separation Reason to see live calculations.")
+            st.markdown(
+                '<div style="background:#F9FAFB;border:1.5px dashed #E5E7EB;border-radius:8px;'
+                'padding:24px;text-align:center;color:#9CA3AF;font-size:13px;margin-top:8px;">'
+                '⚡ Fill in Dates + Separation Reason<br/>to see live calculations</div>',
+                unsafe_allow_html=True,
+            )
 
     st.divider()
 
-    # ── Submit ────────────────────────────────────────────────────────────────
-    if st.button("Submit Case", type="primary", use_container_width=True):
+    # ── Submit ─────────────────────────────────────────────────────────────────
+    if st.button("✓  Submit Separation Case", type="primary", use_container_width=True):
         err = []
         if not dor:         err.append("Date of Resignation")
         if not lwd:         err.append("Last Working Date")
@@ -288,7 +385,6 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
                     pass
                 st.success(f"Case **{case_id}** created!")
 
-        # Clean up and go back
         for k in [k for k in st.session_state if k.startswith("cf_") or k.startswith("_cf_")]:
             st.session_state.pop(k, None)
         st.rerun()
@@ -297,6 +393,7 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
 # ── Case summary (read-only) ───────────────────────────────────────────────────
 
 def _case_summary(c: dict):
+    st.markdown(_chip(c.get("status","")), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
         st.write(f"**DOR:** {c.get('date_of_resignation','')}  |  **LWD:** {c.get('last_working_date','')}")
@@ -326,23 +423,42 @@ def render_my_team(user_email: str):
         return
 
     st.caption(f"{len(employees)} active direct report(s)")
-    hdr = st.columns([3,2,2,2,1.5])
-    for h, t in zip(hdr, ["Name","Designation","Grade","Entity","Action"]):
-        h.markdown(f"**{t}**")
-    st.divider()
+
+    # Table header
+    st.markdown(
+        '<div style="display:grid;grid-template-columns:2.5fr 2fr 1fr 1.5fr 110px;'
+        'padding:10px 12px;background:#FAFAFA;border:1px solid #E5E7EB;'
+        'border-radius:10px 10px 0 0;font-size:10.5px;font-weight:700;'
+        'text-transform:uppercase;letter-spacing:.5px;color:#9CA3AF;">'
+        '<div>Employee</div><div>Designation</div><div>Grade</div>'
+        '<div>Entity</div><div>Action</div></div>',
+        unsafe_allow_html=True,
+    )
 
     for emp in employees:
-        cols = st.columns([3,2,2,2,1.5])
-        cols[0].write(f"**{emp['full_name']}**")
+        cols = st.columns([2.5, 2, 1, 1.5, 1.1])
+        with cols[0]:
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">'
+                f'{_avatar(emp["full_name"])}'
+                f'<div><div style="font-weight:700;color:#111827;font-size:13px;">{emp["full_name"]}</div>'
+                f'<div style="font-size:11px;color:#9CA3AF;">{emp.get("emp_code","")}</div>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
         cols[1].write(emp.get("external_designation",""))
-        cols[2].write(emp.get("grade",""))
+        cols[2].markdown(
+            f'<span style="background:#EFF6FF;color:#1D4ED8;padding:2px 9px;'
+            f'border-radius:999px;font-size:11px;font-weight:700;">'
+            f'{emp.get("grade","")}</span>',
+            unsafe_allow_html=True,
+        )
         cols[3].write(emp.get("entity",""))
-        if cols[4].button("Open", key=f"open_{emp['emp_code']}"):
-            # Clear old form state
+        if cols[4].button("Open →", key=f"open_{emp['emp_code']}"):
             for k in [k for k in st.session_state if k.startswith("cf_") or k.startswith("_cf_")]:
                 st.session_state.pop(k, None)
-            st.session_state["cf_active_emp"]  = emp
-            st.session_state["cf_edit_case"]   = None
+            st.session_state["cf_active_emp"] = emp
+            st.session_state["cf_edit_case"]  = None
             st.rerun()
 
 
@@ -360,7 +476,7 @@ def render_my_cases(user_email: str):
     STATUS_ICON = {"Pending":"🟡","Hold":"🟠","Submitted":"🔵","Sent Back":"🔴","Admin Closed":"🟢"}
 
     for case in cases:
-        icon = STATUS_ICON.get(case.get("status",""), "⚪")
+        icon     = STATUS_ICON.get(case.get("status",""), "⚪")
         editable = (
             str(case.get("closure_status","")).lower() != "closed" and
             case.get("status","").lower() in ("pending","hold","sent back","sentback")
@@ -393,7 +509,8 @@ def render_my_cases(user_email: str):
 # ── Manager dashboard ──────────────────────────────────────────────────────────
 
 def manager_dashboard(user_email: str):
-    # Form renders ABOVE tabs — no duplicate key issue
+    _inject_css()
+
     if st.session_state.get("cf_active_emp"):
         emp       = st.session_state["cf_active_emp"]
         edit_case = st.session_state.get("cf_edit_case")
@@ -402,9 +519,8 @@ def manager_dashboard(user_email: str):
                 st.session_state.pop(k, None)
             st.rerun()
         _render_case_form(emp, user_email, edit_case)
-        return   # Don't show tabs while form is active
+        return
 
-    # Normal view — tabs only when no form is active
     st.subheader("My Dashboard")
     tab1, tab2 = st.tabs(["My Team", "My Cases"])
     with tab1:

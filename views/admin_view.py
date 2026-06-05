@@ -7,7 +7,7 @@ from lib.db import (
     get_all_user_roles, upsert_user_role, deactivate_user_role,
     get_audit_log, ADMIN_ACTIONS,
 )
-from views.manager_view import render_my_team, render_my_cases
+from views.manager_view import render_my_team, render_my_cases, _inject_css
 
 
 def _inr(v):
@@ -364,6 +364,8 @@ def _users_tab(admin_email: str):
 # ── Admin dashboard (includes My Team + My Cases) ──────────────────────────────
 
 def admin_dashboard(user_email: str):
+    _inject_css()
+
     # Form renders above tabs (same pattern as manager_dashboard)
     if st.session_state.get("cf_active_emp"):
         from views.manager_view import _render_case_form
