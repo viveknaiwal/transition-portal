@@ -1,16 +1,13 @@
-import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from dotenv import load_dotenv
+from lib.config import get_secret
 
-load_dotenv()
-
-GMAIL_USER    = os.getenv("GMAIL_USER", "")
-APP_PASSWORD  = os.getenv("GMAIL_APP_PASSWORD", "")
-FNF_EMAIL     = os.getenv("FNF_EMAIL", "")
-TEST_MODE     = os.getenv("TEST_MODE", "true").lower() == "true"
-ALLOWED_EMAILS = [e.strip().lower() for e in os.getenv("ALLOWED_TEST_EMAILS", "").split(",") if e.strip()]
+GMAIL_USER    = get_secret("GMAIL_USER", "")
+APP_PASSWORD  = get_secret("GMAIL_APP_PASSWORD", "")
+FNF_EMAIL     = get_secret("FNF_EMAIL", "")
+TEST_MODE     = get_secret("TEST_MODE", "true").lower() == "true"
+ALLOWED_EMAILS = [e.strip().lower() for e in get_secret("ALLOWED_TEST_EMAILS", "").split(",") if e.strip()]
 
 
 def _send(to: list[str], subject: str, html: str, cc: list[str] = None):

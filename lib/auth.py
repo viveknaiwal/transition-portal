@@ -1,13 +1,10 @@
-import os
 import time
 import random
 import base64
 import streamlit as st
-from dotenv import load_dotenv
+from lib.config import get_secret
 
-load_dotenv()
-
-DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
+DEV_MODE = get_secret("DEV_MODE", "false").lower() == "true"
 
 
 def _set_token(email: str):

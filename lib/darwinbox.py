@@ -1,12 +1,9 @@
 # Darwinbox API client — employee master + payroll CTC (mirrors hr-dashboard Code.gs)
-import os
 import re
 import base64
 import requests
 from datetime import date, datetime
-from dotenv import load_dotenv
-
-load_dotenv()
+from lib.config import get_secret
 
 MASTER_URL  = "https://cars24.darwinbox.in/masterapi/employee"
 PAYROLL_URL = "https://cars24.darwinbox.in/payrollapi/ctcbreakup"
@@ -18,8 +15,8 @@ CTC_FROM    = "01-01-2020"
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
 def _auth() -> str:
-    u = os.getenv("DARWINBOX_USERNAME", "")
-    p = os.getenv("DARWINBOX_PASSWORD", "")
+    u = get_secret("DARWINBOX_USERNAME", "")
+    p = get_secret("DARWINBOX_PASSWORD", "")
     return "Basic " + base64.b64encode(f"{u}:{p}".encode()).decode()
 
 def _headers() -> dict:
@@ -148,7 +145,7 @@ def _get_manager_id(row: dict) -> str:
 
 def fetch_ctc_data(emp_ids: list) -> dict:
     """Fetch payroll CTC in batches of 500. Returns {emp_code: flat_ctc_dict}."""
-    api_key = os.getenv("DARWINBOX_PAYROLL_API_KEY", "")
+    api_key = get_secret("DARWINBOX_PAYROLL_API_KEY", "")
     if not api_key:
         print("WARNING: DARWINBOX_PAYROLL_API_KEY not set — CTC will be 0")
         return {}
@@ -193,8 +190,8 @@ def fetch_employee_master() -> list[dict]:
     resp = requests.post(
         MASTER_URL,
         json={
-            "api_key":    os.getenv("DARWINBOX_MASTER_API_KEY", ""),
-            "datasetKey": os.getenv("DARWINBOX_DATASET_KEY", ""),
+            "api_key":    get_secret("DARWINBOX_MASTER_API_KEY", ""),
+            "datasetKey": get_secret("DARWINBOX_DATASET_KEY", ""),
         },
         headers=_headers(),
         timeout=120,
@@ -333,8 +330,8 @@ def fetch_employee_master() -> list[dict]:
 
 def test_connection() -> dict:
     """Diagnostic — returns API response structure without full processing."""
-    api_key     = os.getenv("DARWINBOX_MASTER_API_KEY", "")
-    dataset_key = os.getenv("DARWINBOX_DATASET_KEY", "")
+    api_key     = get_secret("DARWINBOX_MASTER_API_KEY", "")
+    dataset_key = get_secret("DARWINBOX_DATASET_KEY", "")
     try:
         resp = requests.post(
             MASTER_URL,

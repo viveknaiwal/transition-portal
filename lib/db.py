@@ -1,10 +1,7 @@
-import os
 import uuid
 from datetime import datetime, timezone
 from supabase import create_client, Client
-from dotenv import load_dotenv
-
-load_dotenv()
+from lib.config import get_secret
 
 _client: Client | None = None
 
@@ -36,10 +33,10 @@ ADMIN_ACTIONS = ["Closed", "Sent Back"]
 def get_client() -> Client:
     global _client
     if _client is None:
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_ANON_KEY")
+        url = get_secret("SUPABASE_URL")
+        key = get_secret("SUPABASE_ANON_KEY")
         if not url or not key:
-            raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in .env")
+            raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in secrets")
         _client = create_client(url, key)
     return _client
 
