@@ -3,28 +3,23 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from lib.config import get_secret
 
-GMAIL_USER    = get_secret("GMAIL_USER", "")
-APP_PASSWORD  = get_secret("GMAIL_APP_PASSWORD", "")
-FNF_EMAIL     = get_secret("FNF_EMAIL", "")
-TEST_MODE     = get_secret("TEST_MODE", "true").lower() == "true"
-ALLOWED_EMAILS = [e.strip().lower() for e in get_secret("ALLOWED_TEST_EMAILS", "").split(",") if e.strip()]
+GMAIL_USER   = get_secret("GMAIL_USER", "")
+APP_PASSWORD = get_secret("GMAIL_APP_PASSWORD", "")
+FNF_EMAIL    = get_secret("FNF_EMAIL", "")
+TEST_MODE    = get_secret("TEST_MODE", "true").lower() == "true"
+TEST_EMAIL   = get_secret("TEST_EMAIL", GMAIL_USER)   # redirect target in test mode
 
 
 def _send(to: list[str], subject: str, html: str, cc: list[str] = None):
     if not APP_PASSWORD:
         raise RuntimeError("GMAIL_APP_PASSWORD not set in secrets — cannot send email.")
 
-    # TEST_MODE safety: block emails to non-allowed addresses
     if TEST_MODE:
-        all_recipients = [r.lower() for r in (to + (cc or []))]
-        blocked = [r for r in all_recipients if r not in ALLOWED_EMAILS]
-        if blocked:
-            raise RuntimeError(
-                f"TEST_MODE is ON — email blocked.\n"
-                f"Blocked recipients: {', '.join(blocked)}\n"
-                f"Allowed: {', '.join(ALLOWED_EMAILS)}\n"
-                f"Set TEST_MODE=false in Streamlit Secrets to go live."
-            )
+        # Redirect everything to TEST_EMAIL; prepend original recipients in subject
+        original = ", ".join(to + (cc or []))
+        subject  = f"[TEST → {original}] {subject}"
+        to       = [TEST_EMAIL]
+        cc       = None
 
     msg            = MIMEMultipart("alternative")
     msg["Subject"] = subject
