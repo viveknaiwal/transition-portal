@@ -46,13 +46,29 @@ def _case_detail(c: dict):
         st.link_button("📎 View Approval Document", c["approval_file_url"])
 
     st.caption("FNF Summary")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Monthly Fixed Gross",  _inr(c.get("monthly_fixed_gross")))
-    m2.metric("Severance Pay",        _inr(c.get("severance_pay_amount")))
-    m3.metric("Notice Period Amount", _inr(c.get("notice_period_amount")))
-    m1.metric("Severance Days",       c.get("severance_days", 0))
-    m2.metric("Notice Period Days",   c.get("notice_period_days", 0))
-    m3.metric("Variable Pay",         _inr(c.get("variable_pay_amount")))
+    tiles = [
+        ("Monthly Fixed Gross",  _inr(c.get("monthly_fixed_gross"))),
+        ("Severance Pay",        _inr(c.get("severance_pay_amount"))),
+        ("Severance Days",       str(c.get("severance_days", 0))),
+        ("Notice Period Amt",    _inr(c.get("notice_period_amount"))),
+        ("Notice Period Days",   str(c.get("notice_period_days", 0))),
+        ("Variable Pay",         _inr(c.get("variable_pay_amount"))),
+    ]
+    tile_html = "".join(
+        f'<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;'
+        f'padding:12px 14px;min-width:0;">'
+        f'<div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;'
+        f'letter-spacing:.4px;margin-bottom:6px;">{lbl}</div>'
+        f'<div style="font-size:16px;font-weight:800;color:#111827;'
+        f'word-break:break-word;overflow-wrap:anywhere;line-height:1.3;">{val}</div>'
+        f'</div>'
+        for lbl, val in tiles
+    )
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;">'
+        f'{tile_html}</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(
         f"Tenure: {c.get('tenure','')}  ·  "
         f"Cohort: {c.get('tenure_cohort','')}  ·  "

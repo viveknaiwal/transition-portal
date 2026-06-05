@@ -12,6 +12,26 @@ def _inr(v):
         return "₹0"
 
 
+def _metrics_grid(items: list[tuple[str, str]], cols: int = 3):
+    """Render metric tiles as a responsive HTML grid — never clips at any zoom level."""
+    tiles = "".join(
+        f'<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;'
+        f'padding:12px 14px;min-width:0;">'
+        f'<div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;'
+        f'letter-spacing:.4px;margin-bottom:6px;white-space:nowrap;overflow:hidden;'
+        f'text-overflow:ellipsis;">{label}</div>'
+        f'<div style="font-size:16px;font-weight:800;color:#111827;'
+        f'word-break:break-word;overflow-wrap:anywhere;line-height:1.3;">{value}</div>'
+        f'</div>'
+        for label, value in items
+    )
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:repeat({cols},1fr);'
+        f'gap:10px;margin-bottom:12px;">{tiles}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _chip(status: str) -> str:
     STYLES = {
         "Pending":       ("FEF3C7", "92400E"),
@@ -189,23 +209,25 @@ def payroll_dashboard(user_email: str):
 
                     # ── FNF amounts + days ─────────────────────────────────────
                     st.caption("FNF Calculations")
-                    m1, m2, m3, m4, m5, m6 = st.columns(6)
-                    m1.metric("Monthly Fixed Gross",  _inr(case.get("monthly_fixed_gross")))
-                    m2.metric("Severance Pay",         _inr(case.get("severance_pay_amount")))
-                    m3.metric("Severance Days",        case.get("severance_days", 0))
-                    m4.metric("Notice Period Amt",     _inr(case.get("notice_period_amount")))
-                    m5.metric("Notice Period Days",    case.get("notice_period_days", 0))
-                    m6.metric("Variable Pay",          _inr(case.get("variable_pay_amount")))
+                    _metrics_grid([
+                        ("Monthly Fixed Gross",  _inr(case.get("monthly_fixed_gross"))),
+                        ("Severance Pay",         _inr(case.get("severance_pay_amount"))),
+                        ("Severance Days",        str(case.get("severance_days", 0))),
+                        ("Notice Period Amt",     _inr(case.get("notice_period_amount"))),
+                        ("Notice Period Days",    str(case.get("notice_period_days", 0))),
+                        ("Variable Pay",          _inr(case.get("variable_pay_amount"))),
+                    ], cols=6)
 
                     # ── CTC breakdown ──────────────────────────────────────────
                     st.caption("CTC Breakdown")
-                    t1, t2, t3, t4, t5, t6 = st.columns(6)
-                    t1.metric("Fixed CTC",       _inr(case.get("fixed_ctc")))
-                    t2.metric("Variable",         _inr(case.get("variable")))
-                    t3.metric("Total CTC",        _inr(case.get("total_ctc")))
-                    t4.metric("Provident Fund",   _inr(case.get("provident_fund")))
-                    t5.metric("Gratuity",         _inr(case.get("gratuity")))
-                    t6.metric("Medical Insurance",_inr(case.get("medical_insurance")))
+                    _metrics_grid([
+                        ("Fixed CTC",        _inr(case.get("fixed_ctc"))),
+                        ("Variable",          _inr(case.get("variable"))),
+                        ("Total CTC",         _inr(case.get("total_ctc"))),
+                        ("Provident Fund",    _inr(case.get("provident_fund"))),
+                        ("Gratuity",          _inr(case.get("gratuity"))),
+                        ("Medical Insurance", _inr(case.get("medical_insurance"))),
+                    ], cols=6)
 
                     st.divider()
 
