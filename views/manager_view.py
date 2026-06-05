@@ -21,7 +21,6 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif !important;
 }
 p, label, h1, h2, h3, h4, h5, h6,
-div, span,
 [data-testid="stWidgetLabel"] p,
 [data-testid="stWidgetLabel"] label,
 .streamlit-expanderHeader p,
