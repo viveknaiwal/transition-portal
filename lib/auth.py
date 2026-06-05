@@ -35,7 +35,7 @@ def login_page():
     st.markdown(
         """
         <div style="text-align:center;padding:40px 0 8px;">
-          <h1 style="color:#e31837;margin-bottom:4px;">🔄 Transition Portal</h1>
+          <h1 style="color:#4736FE;margin-bottom:4px;">🔄 Transition Portal</h1>
           <p style="color:#666;">Cars24 · Employee Separation Management</p>
         </div>
         """,

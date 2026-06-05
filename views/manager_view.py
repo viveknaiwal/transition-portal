@@ -9,34 +9,27 @@ from lib.db import (
 from lib.calculations import calculate_case, _parse_date as _pd
 
 
-# ── Design system ──────────────────────────────────────────────────────────────
+# ── Design system (safe, minimal CSS) ─────────────────────────────────────────
 
 _CSS = """<style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-.stApp, .stMarkdown, .stTextInput input, .stSelectbox select,
-.stTextArea textarea, .stDateInput input, .stButton button,
-.stFileUploader, .stCaption, .stSubheader {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
-}
+/* Font — targeted selectors only, avoids breaking Streamlit internals */
+p, label, h1, h2, h3, span.css-10trblm,
+[data-testid="stWidgetLabel"] p,
+[data-testid="stWidgetLabel"] label,
+.streamlit-expanderHeader p,
+.stButton > button { font-family: 'Plus Jakarta Sans', sans-serif !important; }
+
+/* Primary button → indigo */
 .stButton > button[kind="primary"] {
-  background: #4736FE !important;
-  border: none !important;
-  font-weight: 800 !important;
-  border-radius: 9px !important;
+  background: #4736FE !important; border: none !important;
+  font-weight: 800 !important; border-radius: 9px !important; color: #fff !important;
 }
-.stButton > button[kind="primary"]:hover {
-  background: #3628e0 !important;
-  box-shadow: 0 3px 12px rgba(71,54,254,.3) !important;
-}
-.stButton > button:not([kind="primary"]) {
-  font-weight: 600 !important;
-  border-radius: 8px !important;
-}
-.stTabs [data-baseweb="tab"] {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
-  font-weight: 600 !important;
-}
+.stButton > button[kind="primary"]:hover { background: #3628e0 !important; }
+.stButton > button:not([kind="primary"]) { border-radius: 8px !important; font-weight: 600 !important; }
+
+/* Active tab underline → indigo */
 .stTabs [aria-selected="true"] { color: #4736FE !important; }
 .stTabs [data-baseweb="tab-highlight"] { background: #4736FE !important; }
 </style>"""
@@ -96,7 +89,7 @@ def _chip(status):
     bg, fg = S.get(str(status), ("#F3F4F6", "#6B7280"))
     return (
         f'<span style="background:{bg};color:{fg};padding:3px 9px;'
-        f'border-radius:999px;font-size:10.5px;font-weight:700;">{status}</span>'
+        f'border-radius:999px;font-size:11px;font-weight:700;">{status}</span>'
     )
 
 
@@ -110,8 +103,8 @@ def _calc_cards(items):
         for lbl, val in items
     )
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:repeat(3,1fr);'
-        f'gap:8px;margin-bottom:10px;">{tiles}</div>',
+        f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">'
+        f'{tiles}</div>',
         unsafe_allow_html=True,
     )
 
@@ -158,20 +151,21 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
         st.session_state["cf_rem"]    = edit_case.get("remarks","")               if is_edit else ""
         st.session_state[init_key]    = True
 
-    # ── Dark form header ───────────────────────────────────────────────────────
+    # ── Form title bar ─────────────────────────────────────────────────────────
     initials = "".join(w[0].upper() for w in name.split() if w)[:2] or "?"
     action   = "Edit Separation" if is_edit else "Initiate Separation"
     st.markdown(
-        f'<div style="background:#0F0E1A;padding:16px 20px;border-radius:10px 10px 0 0;'
-        f'display:flex;align-items:center;gap:14px;margin-bottom:0;">'
-        f'<div style="width:42px;height:42px;border-radius:50%;background:rgba(71,54,254,.2);'
-        f'color:#7B6FFF;font-size:15px;font-weight:800;display:flex;align-items:center;'
-        f'justify-content:center;flex-shrink:0;">{initials}</div>'
-        f'<div><div style="color:#fff;font-size:15px;font-weight:800;'
-        f'font-family:\'Plus Jakarta Sans\',sans-serif;">{action} — {name}</div>'
-        f'<div style="color:#6B7280;font-size:12px;margin-top:2px;">'
-        f'{emp_code} · {emp.get("external_designation","")} · '
-        f'{emp.get("grade","")} · {emp.get("entity","")}'
+        f'<div style="background:#0F0E1A;padding:16px 20px;border-radius:10px;'
+        f'display:flex;align-items:center;gap:14px;margin-bottom:16px;">'
+        f'<div style="min-width:42px;height:42px;border-radius:50%;'
+        f'background:rgba(71,54,254,.25);color:#A5B4FC;font-size:15px;font-weight:800;'
+        f'display:flex;align-items:center;justify-content:center;">{initials}</div>'
+        f'<div><div style="color:#F9FAFB;font-size:15px;font-weight:800;'
+        f'font-family:\'Plus Jakarta Sans\',sans-serif;line-height:1.3;">'
+        f'{action} — {name}</div>'
+        f'<div style="color:#9CA3AF;font-size:12px;margin-top:3px;">'
+        f'{emp_code} &nbsp;·&nbsp; {emp.get("external_designation","")} &nbsp;·&nbsp; '
+        f'{emp.get("grade","")} &nbsp;·&nbsp; {emp.get("entity","")}'
         f'</div></div></div>',
         unsafe_allow_html=True,
     )
@@ -199,14 +193,12 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
                                    disabled=not sep_reason,
                                    help="Select Separation Reason first" if not sep_reason else "")
 
-        notice_opts = ["Serving Notice", "Immediate Exit"]
-        notice_type = st.selectbox("Notice Type *", notice_opts, key="cf_notice")
-
+        notice_opts  = ["Serving Notice", "Immediate Exit"]
+        notice_type  = st.selectbox("Notice Type *", notice_opts, key="cf_notice")
         garden_opts  = ["No", "Yes", "NA"]
         garden_leave = st.selectbox("Garden Leave *", garden_opts, key="cf_garden")
-
-        comm_opts   = [""] + COMMUNICATION_STATUSES
-        comm_status = st.selectbox("Communication Status *", comm_opts, key="cf_comm")
+        comm_opts    = [""] + COMMUNICATION_STATUSES
+        comm_status  = st.selectbox("Communication Status *", comm_opts, key="cf_comm")
 
         existing_url  = edit_case.get("approval_file_url","")  if is_edit else ""
         existing_name = edit_case.get("approval_file_name","") if is_edit else ""
@@ -222,36 +214,34 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
     with right:
         # ── Employee card ──────────────────────────────────────────────────────
         _section("Employee Profile", "blue", "👤")
-        doj = emp.get("group_doj","") or emp.get("doj","")
-        meta_rows = [
-            ("Grade / Band",   f'{emp.get("grade","")} / {emp.get("band","")}'),
-            ("Entity",         emp.get("entity","")),
-            ("Date of Joining", doj),
-            ("HRBP",           emp.get("hrbp_name","")),
-            ("L1 Manager",     emp.get("l1_manager","")),
-            ("L2 Manager",     emp.get("l2_manager","")),
-        ]
+        doj      = emp.get("group_doj","") or emp.get("doj","")
         meta_html = "".join(
-            f'<div><div style="font-size:9.5px;font-weight:700;color:#9CA3AF;'
-            f'text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">{lbl}</div>'
-            f'<div style="font-size:12px;color:#374151;font-weight:600;">{val or "—"}</div></div>'
-            for lbl, val in meta_rows
+            f'<div style="padding:4px 0;">'
+            f'<div style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;'
+            f'letter-spacing:.4px;margin-bottom:2px;">{lbl}</div>'
+            f'<div style="font-size:12.5px;color:#1F2937;font-weight:600;">{val or "—"}</div></div>'
+            for lbl, val in [
+                ("Grade / Band",    f'{emp.get("grade","")} / {emp.get("band","")}'),
+                ("Entity",          emp.get("entity","")),
+                ("Date of Joining", doj),
+                ("HRBP",            emp.get("hrbp_name","")),
+                ("L1 Manager",      emp.get("l1_manager","")),
+                ("L2 Manager",      emp.get("l2_manager","")),
+            ]
         )
         st.markdown(
-            f'<div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;'
-            f'padding:14px;margin-bottom:4px;">'
-            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+            f'<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:10px;padding:16px;">'
+            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">'
             f'{_avatar(name, 40)}'
-            f'<div><div style="font-size:14px;font-weight:800;color:#111827;'
-            f'font-family:\'Plus Jakarta Sans\',sans-serif;">{name}</div>'
-            f'<div style="font-size:11.5px;color:#6B7280;margin-top:1px;">'
+            f'<div><div style="font-size:14px;font-weight:800;color:#111827;">{name}</div>'
+            f'<div style="font-size:12px;color:#6B7280;margin-top:2px;">'
             f'{emp.get("external_designation","")} · {emp_code}</div></div></div>'
-            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">'
             f'{meta_html}</div></div>',
             unsafe_allow_html=True,
         )
 
-        # ── Live calculations (logic untouched, only display updated) ──────────
+        # ── Live calculations ──────────────────────────────────────────────────
         if sep_reason and dor and lwd and lwd >= dor:
             calc = calculate_case(emp, {
                 "last_working_date":                str(lwd),
@@ -281,9 +271,9 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
             st.error("LWD cannot be before DOR — calculations hidden.")
         else:
             st.markdown(
-                '<div style="background:#F9FAFB;border:1.5px dashed #E5E7EB;border-radius:8px;'
-                'padding:24px;text-align:center;color:#9CA3AF;font-size:13px;margin-top:8px;">'
-                '⚡ Fill in Dates + Separation Reason<br/>to see live calculations</div>',
+                '<div style="background:#F9FAFB;border:1.5px dashed #D1D5DB;border-radius:8px;'
+                'padding:24px;text-align:center;color:#9CA3AF;font-size:13px;margin-top:12px;">'
+                '⚡ Fill Dates + Separation Reason<br/>to see live calculations</div>',
                 unsafe_allow_html=True,
             )
 
@@ -409,7 +399,7 @@ def _case_summary(c: dict):
         st.info(f"Admin remarks: {c['admin_remarks']}")
 
 
-# ── Shared render functions ────────────────────────────────────────────────────
+# ── Team table ─────────────────────────────────────────────────────────────────
 
 def render_my_team(user_email: str):
     try:
@@ -424,33 +414,27 @@ def render_my_team(user_email: str):
 
     st.caption(f"{len(employees)} active direct report(s)")
 
-    # Table header
-    st.markdown(
-        '<div style="display:grid;grid-template-columns:2.5fr 2fr 1fr 1.5fr 110px;'
-        'padding:10px 12px;background:#FAFAFA;border:1px solid #E5E7EB;'
-        'border-radius:10px 10px 0 0;font-size:10.5px;font-weight:700;'
-        'text-transform:uppercase;letter-spacing:.5px;color:#9CA3AF;">'
-        '<div>Employee</div><div>Designation</div><div>Grade</div>'
-        '<div>Entity</div><div>Action</div></div>',
-        unsafe_allow_html=True,
-    )
+    # Header row
+    h = st.columns([3, 2.2, 1, 1.8, 1.1])
+    for col, txt in zip(h, ["Employee", "Designation", "Grade", "Entity", "Action"]):
+        col.markdown(f"<span style='font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.5px;'>{txt}</span>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:4px 0 8px 0;border-color:#E5E7EB;'/>", unsafe_allow_html=True)
 
     for emp in employees:
-        cols = st.columns([2.5, 2, 1, 1.5, 1.1])
+        cols = st.columns([3, 2.2, 1, 1.8, 1.1])
         with cols[0]:
             st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">'
+                f'<div style="display:flex;align-items:center;gap:10px;padding:4px 0;">'
                 f'{_avatar(emp["full_name"])}'
-                f'<div><div style="font-weight:700;color:#111827;font-size:13px;">{emp["full_name"]}</div>'
+                f'<div><div style="font-size:13.5px;font-weight:700;color:#111827;">{emp["full_name"]}</div>'
                 f'<div style="font-size:11px;color:#9CA3AF;">{emp.get("emp_code","")}</div>'
                 f'</div></div>',
                 unsafe_allow_html=True,
             )
         cols[1].write(emp.get("external_designation",""))
         cols[2].markdown(
-            f'<span style="background:#EFF6FF;color:#1D4ED8;padding:2px 9px;'
-            f'border-radius:999px;font-size:11px;font-weight:700;">'
-            f'{emp.get("grade","")}</span>',
+            f'<span style="background:#EFF6FF;color:#1D4ED8;padding:3px 10px;'
+            f'border-radius:999px;font-size:11px;font-weight:700;">{emp.get("grade","—")}</span>',
             unsafe_allow_html=True,
         )
         cols[3].write(emp.get("entity",""))
@@ -460,7 +444,10 @@ def render_my_team(user_email: str):
             st.session_state["cf_active_emp"] = emp
             st.session_state["cf_edit_case"]  = None
             st.rerun()
+        st.markdown("<hr style='margin:2px 0;border-color:#F3F4F6;'/>", unsafe_allow_html=True)
 
+
+# ── Cases list ─────────────────────────────────────────────────────────────────
 
 def render_my_cases(user_email: str):
     try:
