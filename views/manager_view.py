@@ -100,29 +100,17 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
         st.session_state["cf_rem"]    = edit_case.get("remarks","")               if is_edit else ""
         st.session_state[init_key]    = True
 
-    # ── Employee banner ───────────────────────────────────────────────────────
-    _section("Employee Details", "blue")
-    bc1, bc2, bc3, bc4 = st.columns(4)
-    bc1.write(f"**{emp.get('full_name','')}**")
-    bc2.write(f"Grade: {emp.get('grade','')} / {emp.get('band','')}")
-    bc3.write(emp.get("external_designation",""))
-    bc4.write(emp.get("entity",""))
-    bc1.caption(f"DOJ: {emp.get('group_doj','') or emp.get('doj','')}")
-    bc2.caption(f"HRBP: {emp.get('hrbp_name','')}")
-    bc3.caption(f"L1: {emp.get('l1_manager','')}")
-    bc4.caption(f"L2: {emp.get('l2_manager','')}")
+    # ── Two-column layout: inputs left, details + calcs right ────────────────
+    left, right = st.columns([1, 1], gap="large")
 
-    # ── Case inputs — regular widgets (no st.form) so calcs show live ────────
-    _section("Case Inputs", "amber")
-    c1, c2 = st.columns(2)
+    with left:
+        _section("Case Inputs", "amber")
 
-    with c1:
         dor = st.date_input("Date of Resignation *", key="cf_dor")
         lwd = st.date_input("Last Working Date *", key="cf_lwd",
                              min_value=date.today(),
                              help="Past dates are greyed out")
 
-        # LWD inline validation
         if lwd and dor:
             if lwd < dor:
                 st.error("LWD cannot be before Date of Resignation.")
@@ -131,62 +119,76 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
 
         reason_opts = [""] + SEPARATION_REASONS
         sep_reason  = st.selectbox("Separation Reason *", reason_opts, key="cf_reason")
+
+        sub_opts = [""] + SUB_REASONS.get(sep_reason, [])
+        if st.session_state.get("cf_sub") not in sub_opts:
+            st.session_state["cf_sub"] = ""
+        sub_reason = st.selectbox("Separation Sub Reason *", sub_opts, key="cf_sub",
+                                   disabled=not sep_reason,
+                                   help="Select Separation Reason first" if not sep_reason else "")
+
         notice_opts = ["Serving Notice", "Immediate Exit"]
         notice_type = st.selectbox("Notice Type *", notice_opts, key="cf_notice")
 
-    with c2:
-        sub_opts   = [""] + SUB_REASONS.get(sep_reason, [])
-        # Reset sub if it doesn't belong to current reason
-        if st.session_state.get("cf_sub") not in sub_opts:
-            st.session_state["cf_sub"] = ""
-        sub_reason   = st.selectbox("Separation Sub Reason *", sub_opts, key="cf_sub",
-                                     disabled=not sep_reason,
-                                     help="Select Separation Reason first" if not sep_reason else "")
-        garden_opts  = ["No","Yes","NA"]
+        garden_opts  = ["No", "Yes", "NA"]
         garden_leave = st.selectbox("Garden Leave *", garden_opts, key="cf_garden")
-        comm_opts    = [""] + COMMUNICATION_STATUSES
-        comm_status  = st.selectbox("Communication Status *", comm_opts, key="cf_comm")
 
-    existing_url  = edit_case.get("approval_file_url","")  if is_edit else ""
-    existing_name = edit_case.get("approval_file_name","") if is_edit else ""
-    if existing_url:
-        st.markdown(f"📎 [Existing Approval Doc: {existing_name or 'View'}]({existing_url})")
+        comm_opts   = [""] + COMMUNICATION_STATUSES
+        comm_status = st.selectbox("Communication Status *", comm_opts, key="cf_comm")
 
-    remarks       = st.text_area("Remarks / Exception", key="cf_rem")
-    approval_file = st.file_uploader("Upload Approval PDF", type=["pdf","jpg","jpeg","png"], key="cf_file")
+        existing_url  = edit_case.get("approval_file_url","")  if is_edit else ""
+        existing_name = edit_case.get("approval_file_name","") if is_edit else ""
+        if existing_url:
+            st.markdown(f"📎 [Existing Approval Doc: {existing_name or 'View'}]({existing_url})")
 
-    if remarks and not approval_file and not existing_url:
-        st.warning("Approval document required when remarks are entered.")
+        remarks       = st.text_area("Remarks / Exception", key="cf_rem")
+        approval_file = st.file_uploader("Upload Approval PDF", type=["pdf","jpg","jpeg","png"], key="cf_file")
 
-    # ── Live calculations — show as user fills form ───────────────────────────
-    if sep_reason and dor and lwd and lwd >= dor:
-        calc = calculate_case(emp, {
-            "last_working_date":               str(lwd),
-            "date_of_resignation":             str(dor),
-            "separation_reason":               sep_reason,
-            "immediate_exit_or_serving_notice": notice_type,
-        })
-        _section("Calculations", "green")
-        _calc_cards([
-            ("Rehire Status",           calc["rehire_status"] or "—"),
-            ("Tenure",                  calc["tenure"] or "—"),
-            ("Tenure Cohort",           calc["tenure_cohort"] or "—"),
-            ("Tenure Served",           str(calc["tenure_served"]) if calc["tenure_served"] != "" else "—"),
-            ("CTC Cohort",              calc["ctc_cohort"] or "—"),
-            ("Severance Applicability", calc["severance_applicability"] or "—"),
-            ("Severance Days",          str(calc["severance_days"])),
-            ("Notice Period (Days)",    str(calc["notice_period_days"])),
-            ("Variable Days (prorata)", str(calc["variable_days_prorata"])),
-        ])
-        _amount_cards([
-            ("Monthly Fixed Gross",  _inr(calc["monthly_fixed_gross"])),
-            ("Severance Pay Amount", _inr(calc["severance_pay_amount"])),
-            ("Notice Period Amount", _inr(calc["notice_period_amount"])),
-            ("Variable Pay Amount",  _inr(calc["variable_pay_amount"])),
-        ])
-    else:
-        if sep_reason and dor and lwd:
-            st.error("LWD cannot be before Date of Resignation — calculations hidden.")
+        if remarks and not approval_file and not existing_url:
+            st.warning("Approval document required when remarks are entered.")
+
+    with right:
+        # ── Employee details (always visible) ─────────────────────────────────
+        _section("Employee Details", "blue")
+        st.markdown(f"**{emp.get('full_name','')}**  &nbsp;·&nbsp; {emp.get('external_designation','')}")
+        d1, d2 = st.columns(2)
+        d1.write(f"**Grade / Band:** {emp.get('grade','')} / {emp.get('band','')}")
+        d2.write(f"**Entity:** {emp.get('entity','')}")
+        d1.write(f"**DOJ:** {emp.get('group_doj','') or emp.get('doj','')}")
+        d2.write(f"**HRBP:** {emp.get('hrbp_name','')}")
+        d1.write(f"**L1:** {emp.get('l1_manager','')}")
+        d2.write(f"**L2:** {emp.get('l2_manager','')}")
+
+        # ── Live calculations (update as user fills inputs) ───────────────────
+        if sep_reason and dor and lwd and lwd >= dor:
+            calc = calculate_case(emp, {
+                "last_working_date":                str(lwd),
+                "date_of_resignation":              str(dor),
+                "separation_reason":                sep_reason,
+                "immediate_exit_or_serving_notice": notice_type,
+            })
+            _section("Live Calculations", "green")
+            _calc_cards([
+                ("Rehire Status",           calc["rehire_status"] or "—"),
+                ("Tenure",                  calc["tenure"] or "—"),
+                ("Tenure Cohort",           calc["tenure_cohort"] or "—"),
+                ("Tenure Served",           str(calc["tenure_served"]) if calc["tenure_served"] != "" else "—"),
+                ("CTC Cohort",              calc["ctc_cohort"] or "—"),
+                ("Severance Applicability", calc["severance_applicability"] or "—"),
+                ("Severance Days",          str(calc["severance_days"])),
+                ("Notice Period (Days)",    str(calc["notice_period_days"])),
+                ("Variable Days (prorata)", str(calc["variable_days_prorata"])),
+            ])
+            _amount_cards([
+                ("Monthly Fixed Gross",  _inr(calc["monthly_fixed_gross"])),
+                ("Severance Pay Amount", _inr(calc["severance_pay_amount"])),
+                ("Notice Period Amount", _inr(calc["notice_period_amount"])),
+                ("Variable Pay Amount",  _inr(calc["variable_pay_amount"])),
+            ])
+        elif sep_reason and dor and lwd and lwd < dor:
+            st.error("LWD cannot be before DOR — calculations hidden.")
+        else:
+            st.info("Fill in Dates + Separation Reason to see live calculations.")
 
     st.divider()
 

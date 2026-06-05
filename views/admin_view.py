@@ -364,6 +364,18 @@ def _users_tab(admin_email: str):
 # ── Admin dashboard (includes My Team + My Cases) ──────────────────────────────
 
 def admin_dashboard(user_email: str):
+    # Form renders above tabs (same pattern as manager_dashboard)
+    if st.session_state.get("cf_active_emp"):
+        from views.manager_view import _render_case_form
+        emp       = st.session_state["cf_active_emp"]
+        edit_case = st.session_state.get("cf_edit_case")
+        if st.button("← Back"):
+            for k in [k for k in st.session_state if k.startswith("cf_") or k.startswith("_cf_")]:
+                st.session_state.pop(k, None)
+            st.rerun()
+        _render_case_form(emp, user_email, edit_case)
+        return
+
     st.subheader("Admin Dashboard")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
