@@ -12,19 +12,27 @@ from lib.calculations import calculate_case, _parse_date as _pd
 # ── Design system (safe, minimal CSS) ─────────────────────────────────────────
 
 _CSS = """<style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+/* Anchor font sizes — prevents Streamlit parent stylesheet resets */
+html { font-size: 16px !important; }
+body { font-size: 14px !important; }
 
-/* Single font for the entire portal — set on root so everything inherits */
+/* Single system font stack — loads instantly, no external request */
 html, body, .stApp, [data-testid="stAppViewContainer"] {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif !important;
 }
 p, label, h1, h2, h3, h4, h5, h6,
-div, span, input, select, textarea, button,
+div, span,
 [data-testid="stWidgetLabel"] p,
 [data-testid="stWidgetLabel"] label,
 .streamlit-expanderHeader p,
 .stButton > button {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif !important;
+}
+
+/* Form elements — Streamlit resets these separately */
+input, select, textarea, button {
+  font-family: inherit !important;
+  font-size: 13px !important;
 }
 
 /* Primary button → indigo */
@@ -76,7 +84,7 @@ def _section(title, color="default", icon=""):
     clr, border = COLORS.get(color, COLORS["default"])
     prefix = f"{icon}&nbsp;" if icon else ""
     st.markdown(
-        f'<div style="font-family:\'Plus Jakarta Sans\',sans-serif;font-size:10px;font-weight:800;'
+        f'<div style="font-family:inherit;font-size:10px;font-weight:800;'
         f'text-transform:uppercase;letter-spacing:.7px;color:{clr};margin:16px 0 10px 0;'
         f'padding-bottom:8px;border-bottom:1px solid {border};">{prefix}{title}</div>',
         unsafe_allow_html=True,
@@ -167,7 +175,7 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
         f'background:rgba(71,54,254,.25);color:#A5B4FC;font-size:15px;font-weight:800;'
         f'display:flex;align-items:center;justify-content:center;">{initials}</div>'
         f'<div><div style="color:#F9FAFB;font-size:15px;font-weight:800;'
-        f'font-family:\'Plus Jakarta Sans\',sans-serif;line-height:1.3;">'
+        f'font-family:inherit;line-height:1.3;">'
         f'{action} — {name}</div>'
         f'<div style="color:#9CA3AF;font-size:12px;margin-top:3px;">'
         f'{emp_code} &nbsp;·&nbsp; {emp.get("external_designation","")} &nbsp;·&nbsp; '
