@@ -363,7 +363,7 @@ def _users_tab(admin_email: str):
     st.subheader("Add ADMIN or PAYROLL User")
     with st.form("add_user"):
         new_email = st.text_input("Email (@cars24.com)")
-        new_role  = st.selectbox("Role", ["ADMIN", "PAYROLL", "HRBP"])
+        new_role  = st.selectbox("Role", ["ADMIN", "SUB_ADMIN", "PAYROLL", "HRBP"])
         if st.form_submit_button("Add User", type="primary"):
             email = new_email.strip().lower()
             if not email.endswith("@cars24.com"):
@@ -377,7 +377,7 @@ def _users_tab(admin_email: str):
 
 # ── Admin dashboard (includes My Team + My Cases) ──────────────────────────────
 
-def admin_dashboard(user_email: str):
+def admin_dashboard(user_email: str, role: str = "ADMIN"):
     _inject_css()
 
     # Form renders above tabs (same pattern as manager_dashboard)
@@ -394,26 +394,34 @@ def admin_dashboard(user_email: str):
 
     st.subheader("Admin Dashboard")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "My Team", "My Cases", "All Cases", "Employee Data & Sync", "Manage Users"
-    ])
+    if role == "ADMIN":
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "My Team", "My Cases", "All Cases", "Employee Data & Sync", "Manage Users"
+        ])
+        tabs = [tab1, tab2, tab3, tab4, tab5]
+    else:  # SUB_ADMIN — no Manage Users
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "My Team", "My Cases", "All Cases", "Employee Data & Sync"
+        ])
+        tabs = [tab1, tab2, tab3, tab4]
 
-    with tab1:
+    with tabs[0]:
         st.caption("Your direct reports. Initiate separation cases here.")
         render_my_team(user_email)
 
-    with tab2:
+    with tabs[1]:
         st.caption("Separation cases you initiated.")
         try:
             render_my_cases(user_email)
         except Exception as e:
             st.error(f"Error loading cases: {e}")
 
-    with tab3:
+    with tabs[2]:
         _all_cases_tab(user_email)
 
-    with tab4:
+    with tabs[3]:
         _sync_tab(user_email)
 
-    with tab5:
-        _users_tab(user_email)
+    if role == "ADMIN":
+        with tabs[4]:
+            _users_tab(user_email)

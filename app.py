@@ -57,9 +57,9 @@ with st.sidebar:
         logout()
 
 # ── Route by role ──────────────────────────────────────────────────────────────
-if role == "ADMIN":
+if role in ("ADMIN", "SUB_ADMIN"):
     from views.admin_view import admin_dashboard
-    admin_dashboard(user_email)
+    admin_dashboard(user_email, role)
 
 elif role == "MANAGER":
     from views.manager_view import manager_dashboard
