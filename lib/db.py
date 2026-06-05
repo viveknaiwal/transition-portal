@@ -196,6 +196,27 @@ def log_audit(action: str, case_id: str, user_email: str, remarks: str = ""):
     }).execute()
 
 
+def get_last_sync_time():
+    """Return datetime of last EMPLOYEE_SYNC, or None if never synced."""
+    from datetime import datetime, timezone
+    sb  = get_client()
+    res = (
+        sb.table("audit_log")
+        .select("created_at")
+        .eq("action", "EMPLOYEE_SYNC")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        return None
+    try:
+        ts = res.data[0]["created_at"]
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
 def get_audit_log(case_id: str) -> list:
     sb = get_client()
     return (

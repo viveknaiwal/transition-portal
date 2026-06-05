@@ -5,9 +5,40 @@ from datetime import datetime, timezone
 from lib.db import (
     get_all_cases, get_case, update_case, log_audit,
     get_all_user_roles, upsert_user_role, deactivate_user_role,
-    get_audit_log, ADMIN_ACTIONS,
+    get_audit_log, get_last_sync_time, ADMIN_ACTIONS,
 )
 from views.manager_view import render_my_team, render_my_cases, _inject_css
+
+AUTO_SYNC_HOURS = 24   # sync if data is older than this
+
+
+def _auto_sync_if_stale(user_email: str):
+    """Silently sync employee data if last sync was >AUTO_SYNC_HOURS ago."""
+    if st.session_state.get("_auto_sync_done"):
+        return
+
+    # Mark done immediately so reruns don't re-trigger
+    st.session_state["_auto_sync_done"] = True
+
+    last = get_last_sync_time()
+    if last:
+        hours_ago = (datetime.now(timezone.utc) - last).total_seconds() / 3600
+        if hours_ago < AUTO_SYNC_HOURS:
+            return   # fresh enough — skip
+
+    # Stale or never synced — run auto-sync
+    placeholder = st.empty()
+    placeholder.info("🔄 Employee data is stale — auto-syncing from Darwinbox…")
+    try:
+        from lib.darwinbox import fetch_employee_master
+        from lib.db import upsert_employees
+        with st.spinner("Syncing employee data…"):
+            employees = fetch_employee_master()
+            count     = upsert_employees(employees)
+        log_audit("EMPLOYEE_SYNC", "SYSTEM", user_email, f"Auto-synced {count} employees")
+        placeholder.success(f"✅ Auto-sync complete — {count} employees updated.")
+    except Exception as e:
+        placeholder.warning(f"⚠️ Auto-sync failed (you can sync manually): {e}")
 
 
 def _inr(v):
@@ -259,6 +290,19 @@ def _all_cases_tab(admin_email: str):
 def _sync_tab(admin_email: str):
     st.subheader("Employee Data — Darwinbox API")
 
+    last = get_last_sync_time()
+    if last:
+        from datetime import timezone
+        hours_ago = (datetime.now(timezone.utc) - last).total_seconds() / 3600
+        if hours_ago < 1:
+            st.success(f"🟢 Last synced **{int(hours_ago * 60)} minutes ago** — data is fresh.")
+        elif hours_ago < AUTO_SYNC_HOURS:
+            st.success(f"🟢 Last synced **{hours_ago:.0f} hours ago** — data is fresh.")
+        else:
+            st.warning(f"🟡 Last synced **{hours_ago:.0f} hours ago** — consider re-syncing.")
+    else:
+        st.error("🔴 Never synced — click Sync from Darwinbox below.")
+
     st.success(
         "Employee data loads **automatically** from Darwinbox APIs "
         "(master + payroll CTC). Cached for **1 hour** — no manual sync needed."
@@ -379,6 +423,7 @@ def _users_tab(admin_email: str):
 
 def admin_dashboard(user_email: str, role: str = "ADMIN"):
     _inject_css()
+    _auto_sync_if_stale(user_email)
 
     # Form renders above tabs (same pattern as manager_dashboard)
     if st.session_state.get("cf_active_emp"):
