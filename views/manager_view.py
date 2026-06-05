@@ -14,12 +14,18 @@ from lib.calculations import calculate_case, _parse_date as _pd
 _CSS = """<style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-/* Font — targeted selectors only, avoids breaking Streamlit internals */
-p, label, h1, h2, h3, span.css-10trblm,
+/* Single font for the entire portal — set on root so everything inherits */
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+p, label, h1, h2, h3, h4, h5, h6,
+div, span, input, select, textarea, button,
 [data-testid="stWidgetLabel"] p,
 [data-testid="stWidgetLabel"] label,
 .streamlit-expanderHeader p,
-.stButton > button { font-family: 'Plus Jakarta Sans', sans-serif !important; }
+.stButton > button {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
 
 /* Primary button → indigo */
 .stButton > button[kind="primary"] {
