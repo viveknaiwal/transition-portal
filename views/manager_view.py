@@ -321,9 +321,11 @@ def _render_case_form(emp: dict, user_email: str, edit_case: dict = None):
         })
 
         old_status = edit_case.get("status","") if is_edit else ""
-        new_status = ("Submitted" if comm_status == "Completed"
-                      else "Sent Back" if old_status.lower() in ("sent back","sentback")
-                      else "Pending" if comm_status in ("","Pending") else "Hold")
+        new_status = (
+            "Submitted" if comm_status == "Completed"
+            else "Hold"    if comm_status == "Hold"
+            else "Pending"
+        )
 
         emp_fields = [
             "emp_code","entity","business_unit","lob","function","sub_function",

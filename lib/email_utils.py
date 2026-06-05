@@ -49,7 +49,7 @@ def send_otp(email: str, otp: str):
 
 def send_case_created(case: dict):
     """Notify HRBP + L2 when a new case is submitted."""
-    recipients = [r for r in [case.get("hrbp_mail_id"), case.get("l2_manager_email"), GMAIL_USER] if r]
+    recipients = [r for r in [case.get("l2_manager_email"), GMAIL_USER] if r]
     if not recipients:
         return
     name    = case.get("emp_name", "")
@@ -105,7 +105,7 @@ def send_closure_email(case: dict):
     if not official_email:
         raise ValueError("Official Email is blank.")
 
-    cc = [r for r in [official_email, hrbp_email] if r]
+    cc = [r for r in [official_email] if r]
 
     name     = case.get("emp_name", "")
     emp_code = case.get("emp_code", "")

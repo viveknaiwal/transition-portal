@@ -95,7 +95,10 @@ def _show_case_detail(case_id: str, admin_email: str):
     email_sent = str(c.get("email_sent", "")).lower() == "sent"
 
     if is_closed:
-        st.success("This case is **Admin Closed**.")
+        if st.session_state.pop(f"_show_closed_toast_{case_id}", False):
+            st.success("✅ Case closed successfully!")
+        else:
+            st.success("This case is **Admin Closed**.")
 
         email_col, reopen_col = st.columns(2)
 
@@ -191,13 +194,24 @@ def _show_case_detail(case_id: str, admin_email: str):
         except Exception:
             pass
 
-        st.success(f"Case marked as **{action}**.")
-        st.rerun()
+        if action == "Sent Back":
+            st.success("Case sent back to manager.")
+            st.rerun()
+        else:
+            # "Closed" — reopen dialog automatically so email button is immediately visible
+            st.session_state["_just_closed_case_id"]          = case_id
+            st.session_state[f"_show_closed_toast_{case_id}"] = True
+            st.rerun()
 
 
 # ── All Cases tab ──────────────────────────────────────────────────────────────
 
 def _all_cases_tab(admin_email: str):
+    # Auto-reopen dialog after a "Closed" action so email button is immediately visible
+    just_closed = st.session_state.pop("_just_closed_case_id", None)
+    if just_closed:
+        _show_case_detail(just_closed, admin_email)
+
     STATUS_ICON = {
         "Pending": "🟡", "Hold": "🟠", "Submitted": "🔵",
         "Sent Back": "🔴", "Admin Closed": "🟢",
