@@ -29,8 +29,8 @@ div, span,
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif !important;
 }
 
-/* Form elements — Streamlit resets these separately */
-input, select, textarea, button {
+/* Form elements — Streamlit resets these separately (exclude button — handled below) */
+input, select, textarea {
   font-family: inherit !important;
   font-size: 13px !important;
 }
