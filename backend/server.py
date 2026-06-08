@@ -868,7 +868,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         query = "SELECT * FROM cases"
         values = []
         filters = []
-        if scope == "my" and user:
+        if scope == "my":
+            if not user:
+                return []
             filters.append("(created_by_blind_idx = %s OR lower(created_by) = lower(%s))")
             values.extend([blind_index(user), user])
         if filters:
