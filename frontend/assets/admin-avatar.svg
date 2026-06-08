@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Admin user">
+  <defs>
+    <linearGradient id="bg" x1="12" y1="10" x2="84" y2="86" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E7FAF8"/>
+      <stop offset="0.52" stop-color="#DCEEFF"/>
+      <stop offset="1" stop-color="#FFF4DF"/>
+    </linearGradient>
+    <linearGradient id="person" x1="24" y1="22" x2="72" y2="78" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0AA9A5"/>
+      <stop offset="0.56" stop-color="#276CFF"/>
+      <stop offset="1" stop-color="#6554FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#1D4E6B" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="96" height="96" rx="48" fill="bg"/>
+  <circle cx="48" cy="48" r="42" fill="url(#bg)"/>
+  <g filter="url(#shadow)">
+    <circle cx="48" cy="35" r="16" fill="url(#person)"/>
+    <path d="M21 76c3.1-17 13.1-26.2 27-26.2S71.9 59 75 76c.4 2.4-1.4 4.5-3.8 4.5H24.8c-2.4 0-4.2-2.1-3.8-4.5Z" fill="url(#person)"/>
+  </g>
+  <circle cx="69" cy="66" r="15" fill="#0AA9A5" stroke="#FFFFFF" stroke-width="5"/>
+  <path d="m62.8 66.2 4.2 4.2 8-9" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
