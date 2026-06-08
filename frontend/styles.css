@@ -2629,8 +2629,9 @@ nav {
 .all-cases-card {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 304px);
+  max-height: calc(100vh - 248px);
   overflow: hidden;
+  padding: 16px 20px 14px;
 }
 
 .cases-sticky-controls {
@@ -2638,12 +2639,53 @@ nav {
   top: auto;
   z-index: 12;
   flex: 0 0 auto;
-  margin: -2px -2px 12px;
-  padding: 2px 2px 12px;
+  margin: -2px -2px 8px;
+  padding: 2px 2px 8px;
   border-radius: 22px 22px 18px 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(250, 253, 255, .88) 72%, rgba(250, 253, 255, 0));
   backdrop-filter: blur(20px);
+}
+
+.all-cases-card .card-head {
+  margin-bottom: 10px;
+}
+
+.all-cases-card .section-kicker {
+  min-height: 20px;
+  margin-bottom: 5px;
+  padding: 0 9px;
+  font-size: 10px;
+}
+
+.all-cases-card h2 {
+  font-size: 19px;
+  line-height: 1.12;
+}
+
+.all-cases-card .card-head p {
+  margin-top: 3px;
+  font-size: 13px;
+}
+
+.all-cases-card .search-row {
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.all-cases-card .search-row label {
+  height: 42px;
+  padding: 0 14px;
+}
+
+.all-cases-card .search-row input {
+  font-size: 14px;
+}
+
+.all-cases-card .search-row .btn {
+  min-height: 42px;
+  padding: 0 16px;
 }
 
 .all-cases-card .case-list {
