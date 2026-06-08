@@ -51,17 +51,21 @@ from constants import (
     SYSTEM_CASE_ID,
     VARIABLE_PAY_START_DATE,
 )
+from crypto import blind_index
 from models import (
     EMPLOYEE_COLUMNS,
     EMPLOYEE_FIELDS,
     ApprovalUpload,
     AuditLog,
     Employee,
+    ManagerOverride,
     OptionValue,
     SeparationReason,
     SeparationSubReason,
     TransitionCase,
     UserRole,
+    encrypted_record,
+    needs_encryption_migration,
     serialize_model,
     serialize_models,
 )
@@ -77,9 +81,10 @@ def db():
 
 def init_database():
     with db() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute((ROOT / "schema.sql").read_text())
             ensure_reference_catalog(cur)
+            migrate_encrypted_tables(cur)
 
 
 def ensure_reference_catalog(cur):
@@ -94,7 +99,7 @@ def ensure_reference_catalog(cur):
             """,
             (reason, sort_order),
         )
-        reason_id = cur.fetchone()[0]
+        reason_id = cur.fetchone()["id"]
         for sub_order, sub_reason in enumerate(sub_reasons, start=1):
             cur.execute(
                 """
@@ -186,11 +191,16 @@ def local_dev_token(email):
 
 
 def get_user_role(user_email):
+    user_email_idx = blind_index(user_email)
     with db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT role FROM user_roles WHERE lower(email) = lower(%s) AND active = true",
-                (user_email,),
+                """
+                SELECT role FROM user_roles
+                WHERE (email_blind_idx = %s OR lower(email) = lower(%s))
+                  AND active = true
+                """,
+                (user_email_idx, user_email),
             )
             role = cur.fetchone()
             if role:
@@ -198,10 +208,10 @@ def get_user_role(user_email):
             cur.execute(
                 """
                 SELECT employee_id FROM employees
-                WHERE lower(l1_manager_email) = lower(%s)
+                WHERE l1_manager_email_blind_idx = %s OR lower(l1_manager_email) = lower(%s)
                 LIMIT 1
                 """,
-                (user_email,),
+                (user_email_idx, user_email),
             )
             return ROLE_MANAGER if cur.fetchone() else None
 
@@ -305,7 +315,8 @@ def calculate_case(employee, payload):
 
 def get_employee_by_code(cur, emp_code):
     cur.execute("SELECT * FROM employees WHERE emp_code = %s LIMIT 1", (emp_code,))
-    return cur.fetchone()
+    row = cur.fetchone()
+    return serialize_model(Employee, row) if row else None
 
 
 def next_case_id(cur, emp_code):
@@ -354,19 +365,23 @@ def upsert_employees(cur, employees):
         return 0
     columns = EMPLOYEE_COLUMNS + ["synced_at"]
     update_columns = [column for column in columns if column != "employee_id"]
+    sample_record = encrypted_record(Employee, {column: None for column in columns}, columns)
+    insert_columns = list(sample_record.keys())
+    update_columns = [column for column in insert_columns if column != "employee_id"]
     assignments = ", ".join([f"{column} = EXCLUDED.{column}" for column in update_columns])
-    placeholders = ", ".join(["%s"] * len(columns))
+    placeholders = ", ".join(["%s"] * len(insert_columns))
     total = 0
     for index in range(0, len(employees), 200):
         batch = employees[index:index + 200]
-        values = [
-            [employee.get(column) if column != "synced_at" else datetime.now(timezone.utc) for column in columns]
-            for employee in batch
-        ]
+        values = []
+        for employee in batch:
+            data = {column: employee.get(column) if column != "synced_at" else datetime.now(timezone.utc) for column in columns}
+            record = encrypted_record(Employee, data, columns)
+            values.append([record.get(column) for column in insert_columns])
         psycopg2.extras.execute_batch(
             cur,
             f"""
-            INSERT INTO employees ({', '.join(columns)})
+            INSERT INTO employees ({', '.join(insert_columns)})
             VALUES ({placeholders})
             ON CONFLICT (employee_id) DO UPDATE SET {assignments}
             """,
@@ -375,6 +390,41 @@ def upsert_employees(cur, employees):
         )
         total += len(batch)
     return total
+
+
+def migrate_encrypted_tables(cur):
+    for model_cls in (UserRole, Employee, ManagerOverride, TransitionCase, AuditLog, ApprovalUpload):
+        cur.execute(f"SELECT * FROM {model_cls.table_name}")
+        for raw_row in cur.fetchall():
+            if not needs_encryption_migration(model_cls, raw_row):
+                continue
+            row = serialize_model(model_cls, raw_row)
+            columns = [
+                *[field for field in model_cls.encrypted_fields if field in row],
+                *model_cls.blind_index_fields.values(),
+            ]
+            record = encrypted_record(model_cls, row, columns)
+            assignments = ", ".join([f"{column} = %s" for column in record])
+            values = list(record.values()) + [raw_row[model_cls.primary_key]]
+            cur.execute(
+                f"UPDATE {model_cls.table_name} SET {assignments} WHERE {model_cls.primary_key} = %s",
+                values,
+            )
+
+
+def insert_audit(cur, action, case_id, user_email, remarks):
+    record = encrypted_record(AuditLog, {
+        "action": action,
+        "case_id": case_id,
+        "user_email": user_email,
+        "remarks": remarks,
+    })
+    columns = list(record.keys())
+    placeholders = ", ".join(["%s"] * len(columns))
+    cur.execute(
+        f"INSERT INTO audit_log ({', '.join(columns)}) VALUES ({placeholders})",
+        [record[column] for column in columns],
+    )
 
 
 class ApiHandler(BaseHTTPRequestHandler):
@@ -621,20 +671,22 @@ class ApiHandler(BaseHTTPRequestHandler):
         return self.send_json(data)
 
     def employee_rows(self, cur, user):
+        user_idx = blind_index(user)
         cur.execute(
             """
             SELECT * FROM employees
             WHERE employee_status = 'Active'
               AND (
-                lower(l1_manager_email) = lower(%s)
+                l1_manager_email_blind_idx = %s
+                OR lower(l1_manager_email) = lower(%s)
                 OR emp_code IN (
                   SELECT emp_code FROM manager_overrides
-                  WHERE lower(manager_email) = lower(%s)
+                  WHERE manager_email_blind_idx = %s OR lower(manager_email) = lower(%s)
                 )
               )
-            ORDER BY full_name
+            ORDER BY emp_code
             """,
-            (user, user),
+            (user_idx, user, user_idx, user),
         )
         return serialize_models(Employee, cur.fetchall())
 
@@ -658,16 +710,22 @@ class ApiHandler(BaseHTTPRequestHandler):
         values = []
         filters = []
         if scope == "my" and user:
-            filters.append("lower(created_by) = lower(%s)")
-            values.append(user)
-        if q:
-            filters.append("(case_id ILIKE %s OR emp_name ILIKE %s OR emp_code ILIKE %s)")
-            values.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+            filters.append("(created_by_blind_idx = %s OR lower(created_by) = lower(%s))")
+            values.extend([blind_index(user), user])
         if filters:
             query += " WHERE " + " AND ".join(filters)
         query += " ORDER BY created_at DESC"
         cur.execute(query, values)
-        return serialize_models(TransitionCase, cur.fetchall())
+        rows = serialize_models(TransitionCase, cur.fetchall())
+        if q:
+            needle = q.strip().lower()
+            rows = [
+                row for row in rows
+                if needle in str(row.get("case_id", "")).lower()
+                or needle in str(row.get("emp_code", "")).lower()
+                or needle in str(row.get("emp_name", "")).lower()
+            ]
+        return rows
 
     def cases(self, params):
         user = self.current_user()
@@ -753,17 +811,15 @@ class ApiHandler(BaseHTTPRequestHandler):
                     "created_by_role": user.get("role", DEFAULT_ROLE),
                     **calc,
                 }
-                columns = list(data.keys())
+                record = encrypted_record(TransitionCase, data)
+                columns = list(record.keys())
                 placeholders = ", ".join(["%s"] * len(columns))
                 cur.execute(
                     f"INSERT INTO cases ({', '.join(columns)}) VALUES ({placeholders}) RETURNING *",
-                    [data[col] for col in columns],
+                    [record[col] for col in columns],
                 )
                 created = cur.fetchone()
-                cur.execute(
-                    "INSERT INTO audit_log (action, case_id, user_email, remarks) VALUES (%s, %s, %s, %s)",
-                    (ACTION_CASE_CREATED, created["case_id"], user["email"], data.get("remarks", "")),
-                )
+                insert_audit(cur, ACTION_CASE_CREATED, created["case_id"], user["email"], data.get("remarks", ""))
                 return self.send_json(serialize_model(TransitionCase, created), 201)
 
     def update_case(self, case_id):
@@ -824,16 +880,14 @@ class ApiHandler(BaseHTTPRequestHandler):
 
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                assignments = ", ".join([f"{key} = %s" for key in updates])
-                values = list(updates.values()) + [case_id]
+                record = encrypted_record(TransitionCase, updates)
+                assignments = ", ".join([f"{key} = %s" for key in record])
+                values = list(record.values()) + [case_id]
                 cur.execute(f"UPDATE cases SET {assignments} WHERE case_id = %s RETURNING *", values)
                 updated = cur.fetchone()
                 if not updated:
                     return self.send_json({"error": "Case not found"}, 404)
-                cur.execute(
-                    "INSERT INTO audit_log (action, case_id, user_email, remarks) VALUES (%s, %s, %s, %s)",
-                    (audit_action, case_id, user["email"], remarks),
-                )
+                insert_audit(cur, audit_action, case_id, user["email"], remarks)
                 return self.send_json(serialize_model(TransitionCase, updated))
 
     def role_rows(self, cur):
@@ -855,20 +909,18 @@ class ApiHandler(BaseHTTPRequestHandler):
             return self.send_json({"error": "Only @cars24.com emails allowed"}, 400)
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                record = encrypted_record(UserRole, {"email": email, "role": role, "active": True})
                 cur.execute(
                     """
-                    INSERT INTO user_roles (email, role, active)
-                    VALUES (%s, %s, true)
-                    ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, active = true
+                    INSERT INTO user_roles (email, email_blind_idx, role, active)
+                    VALUES (%s, %s, %s, true)
+                    ON CONFLICT (email_blind_idx) DO UPDATE SET role = EXCLUDED.role, active = true
                     RETURNING *
                     """,
-                    (email, role),
+                    (record["email"], record["email_blind_idx"], role),
                 )
                 role_row = cur.fetchone()
-                cur.execute(
-                    "INSERT INTO audit_log (action, case_id, user_email, remarks) VALUES (%s, %s, %s, %s)",
-                    (ACTION_USER_ROLE_ADDED, SYSTEM_CASE_ID, user["email"], f"{email} -> {role}"),
-                )
+                insert_audit(cur, ACTION_USER_ROLE_ADDED, SYSTEM_CASE_ID, user["email"], f"{email} -> {role}")
                 return self.send_json(serialize_model(UserRole, role_row), 201)
 
     def update_role(self, role_id):
@@ -909,14 +961,19 @@ class ApiHandler(BaseHTTPRequestHandler):
 
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                record = encrypted_record(ApprovalUpload, {
+                    "id": upload_id,
+                    "original_name": file_name,
+                    "stored_name": stored_name,
+                    "content_type": content_type,
+                    "size_bytes": len(content),
+                    "uploaded_by": user["email"],
+                })
+                columns = list(record.keys())
+                placeholders = ", ".join(["%s"] * len(columns))
                 cur.execute(
-                    """
-                    INSERT INTO approval_uploads
-                      (id, original_name, stored_name, content_type, size_bytes, uploaded_by)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    RETURNING *
-                    """,
-                    (upload_id, file_name, stored_name, content_type, len(content), user["email"]),
+                    f"INSERT INTO approval_uploads ({', '.join(columns)}) VALUES ({placeholders}) RETURNING *",
+                    [record[column] for column in columns],
                 )
                 row = serialize_model(ApprovalUpload, cur.fetchone())
                 row["url"] = f"/api/uploads/{upload_id}"
@@ -956,7 +1013,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         employee_ms = elapsed_ms(employee_start)
 
         payroll_start = time.perf_counter()
-        cur.execute("SELECT count(*) AS total FROM employees WHERE total_ctc IS NOT NULL AND total_ctc > 0")
+        cur.execute("SELECT count(*) AS total FROM employees WHERE total_ctc IS NOT NULL AND total_ctc <> ''")
         payroll_rows = cur.fetchone()["total"] or 0
         payroll_ms = elapsed_ms(payroll_start)
 
@@ -1005,10 +1062,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     f"{checks['payroll_cache']['rows']} payroll rows, "
                     f"Darwinbox {darwinbox_summary}."
                 )
-                cur.execute(
-                    "INSERT INTO audit_log (action, case_id, user_email, remarks) VALUES (%s, %s, %s, %s)",
-                    (ACTION_SYNC_CHECK, SYSTEM_CASE_ID, user["email"], remarks[:500]),
-                )
+                insert_audit(cur, ACTION_SYNC_CHECK, SYSTEM_CASE_ID, user["email"], remarks[:500])
                 payload["sync"] = self.sync_status(cur)
                 payload["metrics"] = self.metrics(cur)
                 return self.send_json(payload, 201)
@@ -1044,7 +1098,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             """
             SELECT
               count(*) AS total,
-              count(*) FILTER (WHERE total_ctc IS NOT NULL AND total_ctc > 0) AS with_ctc
+              count(*) FILTER (WHERE total_ctc IS NOT NULL AND total_ctc <> '') AS with_ctc
             FROM employees
             """
         )
@@ -1104,10 +1158,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             try:
                 with db() as conn:
                     with conn.cursor() as cur:
-                        cur.execute(
-                            "INSERT INTO audit_log (action, case_id, user_email, remarks) VALUES (%s, %s, %s, %s)",
-                            (ACTION_EMPLOYEE_SYNC_FAILED, SYSTEM_CASE_ID, user["email"], str(exc)[:500]),
-                        )
+                        insert_audit(cur, ACTION_EMPLOYEE_SYNC_FAILED, SYSTEM_CASE_ID, user["email"], str(exc)[:500])
             except psycopg2.Error:
                 pass
             status = 400 if "Missing Darwinbox credentials" in str(exc) else 502
@@ -1117,10 +1168,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 rows_synced = upsert_employees(cur, employees)
                 elapsed = elapsed_ms(started)
-                cur.execute(
-                    "INSERT INTO audit_log (action, case_id, user_email, remarks) VALUES (%s, %s, %s, %s)",
-                    (ACTION_EMPLOYEE_SYNC, SYSTEM_CASE_ID, user["email"], f"Synced {rows_synced} rows from Darwinbox in {elapsed}ms"),
-                )
+                insert_audit(cur, ACTION_EMPLOYEE_SYNC, SYSTEM_CASE_ID, user["email"], f"Synced {rows_synced} rows from Darwinbox in {elapsed}ms")
                 return self.send_json({
                     "rows_synced": rows_synced,
                     "elapsed_ms": elapsed,

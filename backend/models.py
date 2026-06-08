@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any, ClassVar
 
 from constants import EMPLOYEE_COLUMNS, EMPLOYEE_FIELDS, ROLE_OPTIONS
+from crypto import blind_index, decrypt_value, encrypt_value, is_encrypted_value
 
 
 def json_value(value):
@@ -18,6 +19,8 @@ def json_value(value):
 class DbModel:
     table_name: ClassVar[str] = ""
     primary_key: ClassVar[str] = "id"
+    encrypted_fields: ClassVar[set[str]] = set()
+    blind_index_fields: ClassVar[dict[str, str]] = {}
 
     @classmethod
     def model_fields(cls):
@@ -26,6 +29,9 @@ class DbModel:
     @classmethod
     def from_row(cls, row):
         row_data = dict(row or {})
+        for name in cls.encrypted_fields:
+            if name in row_data:
+                row_data[name] = decrypt_value(row_data.get(name))
         return cls(**{name: row_data.get(name) for name in cls.model_fields() if name in row_data})
 
     def to_dict(self):
@@ -33,17 +39,28 @@ class DbModel:
 
     def to_record(self, columns=None, include_none=True):
         source = self.to_dict()
-        selected = columns or source.keys()
-        return {
+        selected = list(columns or source.keys())
+        record = {
             key: source.get(key)
             for key in selected
             if include_none or source.get(key) is not None
         }
+        for key in list(record):
+            if key in self.encrypted_fields:
+                record[key] = encrypt_value(record[key])
+        for source_field, index_field in self.blind_index_fields.items():
+            if source_field in source and source.get(source_field) not in {None, ""}:
+                record[index_field] = blind_index(source.get(source_field))
+            elif source_field in selected or index_field in selected:
+                record[index_field] = None
+        return record
 
 
 @dataclass(frozen=True)
 class UserRole(DbModel):
     table_name: ClassVar[str] = "user_roles"
+    encrypted_fields: ClassVar[set[str]] = {"email"}
+    blind_index_fields: ClassVar[dict[str, str]] = {"email": "email_blind_idx"}
 
     id: Any = None
     email: Any = None
@@ -56,6 +73,24 @@ class UserRole(DbModel):
 class Employee(DbModel):
     table_name: ClassVar[str] = "employees"
     primary_key: ClassVar[str] = "employee_id"
+    encrypted_fields: ClassVar[set[str]] = {
+        "full_name", "company_email_id", "personal_email_id", "personal_mobile_no",
+        "entity", "business_unit", "lob", "function", "sub_function", "region", "site_name",
+        "grade", "band", "external_designation", "internal_designation", "l1_manager",
+        "l1_manager_email", "l2_manager", "l2_manager_email", "hrbp_name", "hrbp_mail_id",
+        "doj", "group_doj", "gender", "fixed_ctc", "variable", "pli", "retention",
+        "total_ctc", "monthly_gross", "provident_fund", "gratuity", "medical_insurance",
+        "email_check",
+    }
+    blind_index_fields: ClassVar[dict[str, str]] = {
+        "full_name": "full_name_blind_idx",
+        "company_email_id": "company_email_id_blind_idx",
+        "personal_email_id": "personal_email_id_blind_idx",
+        "personal_mobile_no": "personal_mobile_no_blind_idx",
+        "l1_manager_email": "l1_manager_email_blind_idx",
+        "l2_manager_email": "l2_manager_email_blind_idx",
+        "hrbp_mail_id": "hrbp_mail_id_blind_idx",
+    }
 
     employee_id: Any = None
     emp_code: Any = None
@@ -100,6 +135,8 @@ class Employee(DbModel):
 @dataclass(frozen=True)
 class ManagerOverride(DbModel):
     table_name: ClassVar[str] = "manager_overrides"
+    encrypted_fields: ClassVar[set[str]] = {"manager_email", "added_by", "notes"}
+    blind_index_fields: ClassVar[dict[str, str]] = {"manager_email": "manager_email_blind_idx"}
 
     id: Any = None
     emp_code: Any = None
@@ -147,6 +184,35 @@ class OptionValue(DbModel):
 @dataclass(frozen=True)
 class TransitionCase(DbModel):
     table_name: ClassVar[str] = "cases"
+    encrypted_fields: ClassVar[set[str]] = {
+        "emp_name", "official_email", "personal_email", "personal_contact", "entity",
+        "business_unit", "lob", "function", "sub_function", "region", "site_name", "grade",
+        "band", "external_designation", "internal_designation", "l1_manager", "l1_manager_email",
+        "l2_manager", "l2_manager_email", "hrbp_name", "hrbp_mail_id", "doj", "group_doj",
+        "employee_status", "fixed_ctc", "variable", "pli", "retention", "total_ctc",
+        "monthly_gross", "provident_fund", "gratuity", "medical_insurance", "gender",
+        "date_of_resignation", "last_working_date", "immediate_exit_or_serving_notice",
+        "garden_leave", "separation_reason", "separation_sub_reason", "communication_status",
+        "remarks", "approval_file_url", "approval_file_name", "rehire_status", "tenure",
+        "tenure_served", "tenure_cohort", "ctc_cohort", "monthly_fixed_gross",
+        "variable_pay_amount", "variable_days_prorata", "notice_period_days",
+        "notice_period_amount", "severance_applicability", "severance_days",
+        "severance_pay_amount", "april_fy_2025", "one_april_2025", "admin_action",
+        "admin_action_status", "admin_closed_status", "admin_closed_by", "sent_back_by",
+        "admin_remarks", "email_sent_status", "created_by", "created_by_role",
+    }
+    blind_index_fields: ClassVar[dict[str, str]] = {
+        "emp_name": "emp_name_blind_idx",
+        "official_email": "official_email_blind_idx",
+        "personal_email": "personal_email_blind_idx",
+        "personal_contact": "personal_contact_blind_idx",
+        "l1_manager_email": "l1_manager_email_blind_idx",
+        "l2_manager_email": "l2_manager_email_blind_idx",
+        "hrbp_mail_id": "hrbp_mail_id_blind_idx",
+        "created_by": "created_by_blind_idx",
+        "admin_closed_by": "admin_closed_by_blind_idx",
+        "sent_back_by": "sent_back_by_blind_idx",
+    }
 
     id: Any = None
     case_id: Any = None
@@ -233,6 +299,8 @@ class TransitionCase(DbModel):
 @dataclass(frozen=True)
 class AuditLog(DbModel):
     table_name: ClassVar[str] = "audit_log"
+    encrypted_fields: ClassVar[set[str]] = {"user_email", "remarks"}
+    blind_index_fields: ClassVar[dict[str, str]] = {"user_email": "user_email_blind_idx"}
 
     id: Any = None
     action: Any = None
@@ -245,6 +313,8 @@ class AuditLog(DbModel):
 @dataclass(frozen=True)
 class ApprovalUpload(DbModel):
     table_name: ClassVar[str] = "approval_uploads"
+    encrypted_fields: ClassVar[set[str]] = {"original_name", "content_type", "uploaded_by"}
+    blind_index_fields: ClassVar[dict[str, str]] = {"uploaded_by": "uploaded_by_blind_idx"}
 
     id: Any = None
     original_name: Any = None
@@ -275,3 +345,18 @@ def serialize_model(model_cls, row):
 def serialize_models(model_cls, rows):
     return [serialize_model(model_cls, row) for row in rows]
 
+
+def encrypted_record(model_cls, data, columns=None, include_none=True):
+    return model_cls(**{name: data.get(name) for name in model_cls.model_fields() if name in data}).to_record(columns, include_none)
+
+
+def needs_encryption_migration(model_cls, row):
+    raw = dict(row or {})
+    for field_name in model_cls.encrypted_fields:
+        value = raw.get(field_name)
+        if value not in {None, ""} and not is_encrypted_value(value):
+            return True
+    for source_field, index_field in model_cls.blind_index_fields.items():
+        if raw.get(source_field) not in {None, ""} and not raw.get(index_field):
+            return True
+    return False

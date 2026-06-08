@@ -59,6 +59,22 @@ export DARWINBOX_PAYROLL_API_KEY="..."
 
 Approval uploads are stored under `backend/uploads/` and tracked in the `approval_uploads` table.
 
+## Encryption
+
+Sensitive employee, payroll, case, audit, and upload metadata fields are encrypted at the backend model layer before they are written to Postgres. API responses are decrypted in the backend before JSON is sent to the frontend.
+
+Operational fields remain plaintext so the app can still work efficiently: IDs, case IDs, employee codes, statuses, timestamps, and blind-index columns. Blind indexes are HMAC-SHA256 values used for exact lookups such as manager email and created-by email without storing those emails in readable form.
+
+Local/dev uses `ENCRYPTION_DATA_KEY_B64` from `backend/env/local.env`. This key is only for local development. For hosted environments, store a KMS-encrypted 32-byte data key in the deployment secret store:
+
+```bash
+export ENCRYPTION_DATA_KEY_KMS_CIPHERTEXT_B64="..."
+export AWS_KMS_KEY_ID="arn:aws:kms:ap-south-1:...:key/..."
+export AWS_REGION="ap-south-1"
+```
+
+The database will show ciphertext like `enc:v1:...` for encrypted columns. Direct SQL can still inspect operational fields and blind indexes, but readable sensitive values should be viewed through an authorized backend/API path or a dedicated internal decrypt tool that has KMS access.
+
 ## Run
 
 Terminal 1:
