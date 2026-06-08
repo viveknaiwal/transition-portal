@@ -946,11 +946,26 @@ nav {
   padding: 0 10px;
   align-items: center;
   border-radius: 999px;
-  background: #edf8f8;
-  color: var(--teal);
+  background: rgba(129, 160, 181, .14);
+  color: #526174;
   font-weight: 900;
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.status-chip.case-completed {
+  background: rgba(22, 163, 106, .14);
+  color: #087848;
+}
+
+.status-chip.case-processing {
+  background: rgba(255, 179, 63, .20);
+  color: #955a00;
+}
+
+.status-chip.case-pending {
+  background: rgba(221, 91, 66, .16);
+  color: #b42318;
 }
 
 .audit {
@@ -2840,11 +2855,11 @@ nav {
 }
 
 .case-row.case-processing::before {
-  background: linear-gradient(90deg, #276cff, #6554ff);
+  background: linear-gradient(90deg, #ffb33f, #ffcf6f);
 }
 
 .case-row.case-pending::before {
-  background: linear-gradient(90deg, #ffb33f, #ff7f4d);
+  background: linear-gradient(90deg, #dd5b42, #ff7b6b);
 }
 
 .case-main {
@@ -2858,8 +2873,8 @@ nav {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(39, 108, 255, .10);
-  color: #245bd4 !important;
+  background: rgba(129, 160, 181, .14);
+  color: #526174 !important;
 }
 
 .case-completed .case-status-pill {
@@ -2867,9 +2882,14 @@ nav {
   color: #087848 !important;
 }
 
+.case-processing .case-status-pill {
+  background: rgba(255, 179, 63, .20);
+  color: #955a00 !important;
+}
+
 .case-pending .case-status-pill {
-  background: rgba(255, 179, 63, .16);
-  color: #9a5a00 !important;
+  background: rgba(221, 91, 66, .16);
+  color: #b42318 !important;
 }
 
 .settlement-grid {

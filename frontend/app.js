@@ -1377,7 +1377,7 @@ function normalizeStatus(status) {
 }
 
 function statusChip(status) {
-  return `<span class="status-chip">${h(normalizeStatus(status))}</span>`;
+  return `<span class="status-chip ${statusClass(status)}">${h(normalizeStatus(status))}</span>`;
 }
 
 function statusClass(status) {
