@@ -25,6 +25,7 @@ let state = {
   authenticated: false,
   user: null,
   role: "",
+  tabs: ACTIVE_TABS,
   tab: "team",
   view: "dashboard",
   selectedEmployee: null,
@@ -91,6 +92,23 @@ function saveUiState() {
     allCasesPage: state.allCasesPage,
     form: state.form
   }));
+}
+
+function visibleNavItems() {
+  const allowedTabs = new Set((state.tabs && state.tabs.length ? state.tabs : ACTIVE_TABS)
+    .filter((tab) => ACTIVE_TABS.includes(tab)));
+  return NAV_ITEMS.filter((item) => allowedTabs.has(item.key));
+}
+
+function ensureVisibleTab() {
+  const items = visibleNavItems();
+  if (!items.length) {
+    state.tab = "team";
+    return;
+  }
+  if (!items.some((item) => item.key === state.tab)) {
+    state.tab = items[0].key;
+  }
 }
 
 async function init() {
@@ -210,6 +228,8 @@ async function loadBootstrap() {
     const data = await api("/bootstrap");
     state.user = data.user;
     state.role = data.role || data.user?.role || "ADMIN";
+    state.tabs = Array.isArray(data.tabs) && data.tabs.length ? data.tabs.filter((tab) => ACTIVE_TABS.includes(tab)) : ACTIVE_TABS;
+    if (!state.tabs.includes(state.tab)) state.tab = state.tabs[0] || "team";
     state.employees = (data.employees || []).map(mapEmployee);
     state.cases = (data.cases || []).map(mapCase);
     state.options = { ...state.options, ...(data.options || {}) };
@@ -292,6 +312,7 @@ function render() {
     bindEvents();
     return;
   }
+  ensureVisibleTab();
   app.innerHTML = state.view === "form" ? layout(renderForm()) : layout(renderPage());
   bindEvents();
 }
@@ -380,20 +401,21 @@ function layout(content) {
 }
 
 function sidebar() {
+  const navItems = visibleNavItems();
   return `
     <aside class="side">
-      <div class="side-brand">${brandMark()}<div><strong>Transition Portal</strong><span>CARS24 · HR</span></div></div>
+      <div class="side-brand">${brandMark()}<div><strong>Transition Portal</strong><span></span></div></div>
       <label class="quick" title="Press Cmd/Ctrl + K to quick jump">
         <span>⌕</span>
         <input data-quick-jump list="quick-jump-options" placeholder="Quick jump..." autocomplete="off">
         <kbd>⌘</kbd><kbd>K</kbd>
       </label>
       <datalist id="quick-jump-options">
-        ${NAV_ITEMS.map((item) => `<option value="${h(item.title)}"></option>`).join("")}
+        ${navItems.map((item) => `<option value="${h(item.title)}"></option>`).join("")}
       </datalist>
       <div class="nav-label">Journeys</div>
       <nav>
-        ${NAV_ITEMS.map((item) => `
+        ${navItems.map((item) => `
           <button class="nav-item ${state.tab === item.key && state.view !== "form" ? "active" : ""}" data-tab="${item.key}">
             <span class="nav-icon">${item.icon}</span>
             <span><strong>${item.title}</strong><small>${item.subtitle}</small></span>
@@ -440,11 +462,12 @@ function renderPage() {
 }
 
 function dashboardStepper() {
-  const activeIndex = Math.max(0, NAV_ITEMS.findIndex((item) => item.key === state.tab));
-  const progress = NAV_ITEMS.length <= 1 ? 0 : (activeIndex / (NAV_ITEMS.length - 1)) * 100;
+  const navItems = visibleNavItems();
+  const activeIndex = Math.max(0, navItems.findIndex((item) => item.key === state.tab));
+  const progress = navItems.length <= 1 ? 0 : (activeIndex / (navItems.length - 1)) * 100;
   return `
     <div class="dashboard-stepper" style="--step-progress: ${progress / 100}">
-      ${NAV_ITEMS.map((item, index) => `
+      ${navItems.map((item, index) => `
         <button class="dash-step ${state.tab === item.key ? "active" : ""} ${index < activeIndex ? "done" : ""}" data-tab="${item.key}">
           <span>${h(item.hotkey)}</span><strong>${h(item.step)}</strong>
         </button>
@@ -476,6 +499,7 @@ function formStepper(ready) {
 }
 
 function renderTab() {
+  ensureVisibleTab();
   if (state.tab === "team") return renderTeam();
   if (state.tab === "mycases") return renderMyCases();
   if (state.tab === "allcases") return renderAllCases();
@@ -716,6 +740,7 @@ function renderForm() {
 function bindEvents() {
   app.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!visibleNavItems().some((item) => item.key === button.dataset.tab)) return;
       state.tab = button.dataset.tab;
       state.view = "dashboard";
       if (state.tab === "allcases") state.allCasesPage = Math.max(1, Number(state.allCasesPage || 1));
@@ -1059,7 +1084,7 @@ function performQuickJump(query) {
     app.querySelector("[data-quick-jump]")?.focus();
     return;
   }
-  const candidates = NAV_ITEMS.map((item) => ({
+  const candidates = visibleNavItems().map((item) => ({
     item,
     terms: [item.key, item.title, item.subtitle, item.step, item.hotkey, ...(quickJumpAliases()[item.key] || [])]
       .map(normalizeQuickJump)

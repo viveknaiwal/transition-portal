@@ -47,7 +47,11 @@ from constants import (
     REASON_BUSINESS_CONDITIONS,
     REASON_PERFORMANCE_ISSUES,
     REFERENCE_CATALOG,
+    ROLE_ADMIN,
+    ROLE_HRBP,
     ROLE_MANAGER,
+    ROLE_PAYROLL,
+    ROLE_SUB_ADMIN,
     SYSTEM_CASE_ID,
     VARIABLE_PAY_START_DATE,
 )
@@ -151,6 +155,154 @@ def string_claim(claims, *keys):
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def claim_values(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [item for item in re.split(r"[\s,]+", value) if item]
+    if isinstance(value, (list, tuple, set)):
+        values = []
+        for item in value:
+            values.extend(claim_values(item))
+        return values
+    if isinstance(value, dict):
+        values = []
+        for item in value.values():
+            values.extend(claim_values(item))
+        return values
+    return [str(value)]
+
+
+def jwt_permissions(claims):
+    keys = (
+        "role",
+        "roles",
+        "permission",
+        "permissions",
+        "authorities",
+        "authority",
+        "groups",
+        "scope",
+        "scp",
+        "cognito:groups",
+        "realm_access",
+        "resource_access",
+    )
+    values = []
+    for key in keys:
+        values.extend(claim_values(claims.get(key)))
+    normalized = set()
+    for value in values:
+        token = re.sub(r"[^A-Za-z0-9]+", "_", str(value).strip().upper()).strip("_")
+        if token:
+            normalized.add(token)
+    return normalized
+
+
+def has_named_permission(permissions, name):
+    direct = {name, f"ROLE_{name}", f"TRANSITION_PORTAL_{name}"}
+    if permissions.intersection(direct):
+        return True
+    suffix = f"_{name}"
+    prefix = f"{name}_"
+    return any(
+        (permission.endswith(suffix) or permission.startswith(prefix))
+        and not permission.startswith("NON_")
+        for permission in permissions
+    )
+
+
+def has_admin_permission_token(permissions):
+    direct = {"ADMIN", "ROLE_ADMIN", "TRANSITION_PORTAL_ADMIN"}
+    if permissions.intersection(direct):
+        return True
+    return any(
+        (permission.endswith("_ADMIN") or permission.startswith("ADMIN_"))
+        and not permission.endswith("_SUB_ADMIN")
+        and not permission.startswith("SUB_ADMIN")
+        and not permission.startswith("NON_")
+        for permission in permissions
+    )
+
+
+def jwt_role_from_claims(claims):
+    permissions = jwt_permissions(claims)
+    if has_admin_permission_token(permissions):
+        return ROLE_ADMIN
+    if has_named_permission(permissions, "SUB_ADMIN"):
+        return ROLE_SUB_ADMIN
+    if has_named_permission(permissions, "PAYROLL"):
+        return ROLE_PAYROLL
+    if has_named_permission(permissions, "HRBP"):
+        return ROLE_HRBP
+    if has_named_permission(permissions, "MANAGER"):
+        return ROLE_MANAGER
+    return None
+
+
+def has_admin_permission(user):
+    claims = user.get("claims") or {}
+    return jwt_role_from_claims(claims) == ROLE_ADMIN
+
+
+def effective_user_role(user):
+    jwt_role = jwt_role_from_claims(user.get("claims") or {})
+    if jwt_role:
+        return jwt_role
+    db_role = get_user_role(user.get("email", ""))
+    if db_role in {ROLE_MANAGER, ROLE_HRBP}:
+        return db_role
+    return ROLE_MANAGER
+
+
+def admin_tabs():
+    return ["team", "mycases", "allcases", "sync"]
+
+
+def scoped_tabs():
+    return ["team", "mycases"]
+
+
+def dashboard_tabs_for(user):
+    return admin_tabs() if has_admin_permission(user) else scoped_tabs()
+
+
+def require_admin_user(user):
+    if not has_admin_permission(user):
+        raise PermissionError("ADMIN permission is required")
+
+
+def is_case_visible_to_user(case_row, user):
+    if has_admin_permission(user):
+        return True
+    case_data = serialize_model(TransitionCase, case_row)
+    return str(case_data.get("created_by") or "").lower() == str(user.get("email") or "").lower()
+
+
+def can_access_employee(cur, user, emp_code):
+    if has_admin_permission(user):
+        return True
+    user_email = user.get("email", "")
+    user_idx = blind_index(user_email)
+    cur.execute(
+        """
+        SELECT employee_id FROM employees
+        WHERE emp_code = %s
+          AND (
+            l1_manager_email_blind_idx = %s
+            OR lower(l1_manager_email) = lower(%s)
+            OR emp_code IN (
+              SELECT emp_code FROM manager_overrides
+              WHERE manager_email_blind_idx = %s OR lower(manager_email) = lower(%s)
+            )
+          )
+        LIMIT 1
+        """,
+        (emp_code, user_idx, user_email, user_idx, user_email),
+    )
+    return bool(cur.fetchone())
 
 
 def user_from_claims(claims):
@@ -472,7 +624,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 user = user_from_claims(decode_jwt_payload(auth_header.split(" ", 1)[1].strip()))
             except ValueError as exc:
                 raise PermissionError(str(exc)) from exc
-            user["role"] = get_user_role(user.get("email", "")) or DEFAULT_ROLE
+            user["role"] = effective_user_role(user)
             return user
 
         if optional:
@@ -484,8 +636,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "subject": email,
                 "email": email,
                 "name": "Vivek Kumar Naiwal" if email == CONFIG.dev_auth_email else email.split("@")[0],
-                "role": get_user_role(email) or DEFAULT_ROLE,
-                "claims": {"authType": "local_dev"},
+                "role": DEFAULT_ROLE,
+                "claims": {"authType": "local_dev", "roles": [DEFAULT_ROLE]},
             }
 
         raise PermissionError("Authentication required")
@@ -560,6 +712,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             "name": user.get("name") or user.get("email", ""),
             "role": user.get("role", DEFAULT_ROLE),
             "subject": user.get("subject", ""),
+            "isAdmin": has_admin_permission(user),
+            "tabs": dashboard_tabs_for(user),
         }
 
     def auth_config(self):
@@ -655,17 +809,20 @@ class ApiHandler(BaseHTTPRequestHandler):
     def bootstrap(self, params):
         user = self.current_user()
         email = user["email"]
-        role = user.get("role") or get_user_role(email) or DEFAULT_ROLE
+        role = user.get("role") or effective_user_role(user)
+        is_admin = has_admin_permission(user)
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 data = {
                     "user": self.public_user({**user, "role": role}),
                     "role": role,
+                    "isAdmin": is_admin,
+                    "tabs": dashboard_tabs_for(user),
                     "employees": self.employee_rows(cur, email),
-                    "cases": self.case_rows(cur, None, None),
-                    "roles": self.role_rows(cur),
-                    "sync": self.sync_status(cur),
-                    "metrics": self.metrics(cur),
+                    "cases": self.case_rows(cur, None, None) if is_admin else self.case_rows(cur, "my", email),
+                    "roles": self.role_rows(cur) if is_admin else [],
+                    "sync": self.sync_status(cur) if is_admin else {},
+                    "metrics": self.metrics(cur) if is_admin else {},
                     "options": self.options(cur),
                 }
         return self.send_json(data)
@@ -697,9 +854,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.employee_rows(cur, user["email"]))
 
     def employee_detail(self, emp_code):
-        self.current_user()
+        user = self.current_user()
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                if not can_access_employee(cur, user, emp_code):
+                    return self.send_json({"error": "Employee not found"}, 404)
                 employee = get_employee_by_code(cur, emp_code)
                 if not employee:
                     return self.send_json({"error": "Employee not found"}, 404)
@@ -731,33 +890,39 @@ class ApiHandler(BaseHTTPRequestHandler):
         user = self.current_user()
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                requested_scope = params.get("scope")
+                scope = requested_scope if has_admin_permission(user) else "my"
                 return self.send_json(self.case_rows(
                     cur,
-                    params.get("scope"),
-                    user["email"] if params.get("scope") == "my" else None,
+                    scope,
+                    user["email"] if scope == "my" else None,
                     params.get("q", ""),
                 ))
 
     def calculate(self):
-        self.current_user()
+        user = self.current_user()
         payload = self.read_json()
         emp_code = payload.get("emp_code")
         if not emp_code:
             return self.send_json({"error": "emp_code is required"}, 400)
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                if not can_access_employee(cur, user, emp_code):
+                    return self.send_json({"error": "Employee not found"}, 404)
                 employee = get_employee_by_code(cur, emp_code)
                 if not employee:
                     return self.send_json({"error": "Employee not found"}, 404)
                 return self.send_json(calculate_case(employee, payload))
 
     def case_detail(self, case_id):
-        self.current_user()
+        user = self.current_user()
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("SELECT * FROM cases WHERE case_id = %s", (case_id,))
                 case = cur.fetchone()
                 if not case:
+                    return self.send_json({"error": "Case not found"}, 404)
+                if not is_case_visible_to_user(case, user):
                     return self.send_json({"error": "Case not found"}, 404)
                 cur.execute(
                     "SELECT * FROM audit_log WHERE case_id = %s ORDER BY created_at DESC",
@@ -778,6 +943,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 employee = get_employee_by_code(cur, emp_code)
                 if not employee:
+                    return self.send_json({"error": "Employee not found"}, 404)
+                if not can_access_employee(cur, user, emp_code):
                     return self.send_json({"error": "Employee not found"}, 404)
 
                 calc = calculate_case(employee, payload)
@@ -824,6 +991,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def update_case(self, case_id):
         user = self.current_user()
+        require_admin_user(user)
         payload = self.read_json()
         action = payload.get("action")
         remarks = payload.get("remarks", "")
@@ -895,13 +1063,14 @@ class ApiHandler(BaseHTTPRequestHandler):
         return serialize_models(UserRole, cur.fetchall())
 
     def roles(self):
-        self.current_user()
+        require_admin_user(self.current_user())
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 return self.send_json(self.role_rows(cur))
 
     def add_role(self):
         user = self.current_user()
+        require_admin_user(user)
         payload = self.read_json()
         email = (payload.get("email") or "").strip().lower()
         role = payload.get("role") or DEFAULT_ROLE
@@ -924,7 +1093,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return self.send_json(serialize_model(UserRole, role_row), 201)
 
     def update_role(self, role_id):
-        self.current_user()
+        require_admin_user(self.current_user())
         payload = self.read_json()
         active = bool(payload.get("active", False))
         with db() as conn:
@@ -1037,7 +1206,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         }
 
     def sync_test(self):
-        self.current_user()
+        require_admin_user(self.current_user())
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 payload = self.sync_checks(cur)
@@ -1046,6 +1215,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def record_sync_check(self):
         user = self.current_user()
+        require_admin_user(user)
         with db() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 payload = self.sync_checks(cur)
@@ -1151,6 +1321,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def sync(self):
         user = self.current_user()
+        require_admin_user(user)
         started = time.perf_counter()
         try:
             employees = darwinbox.fetch_employee_master()
