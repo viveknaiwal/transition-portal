@@ -215,7 +215,7 @@ def has_named_permission(permissions, name):
 
 
 def has_admin_permission_token(permissions):
-    direct = {"ADMIN", "ROLE_ADMIN", "TRANSITION_PORTAL_ADMIN"}
+    direct = {"ADMIN", "ROLE_ADMIN", "TRANSITION_ADMIN", "TRANSITION_PORTAL_ADMIN"}
     if permissions.intersection(direct):
         return True
     return any(
