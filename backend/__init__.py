@@ -1,2 +1,0 @@
-"""Transition Portal backend package."""
-
